@@ -1,0 +1,54 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: cresco_local
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Camaro@2053
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+  api:
+    build: .
+    command: node src/index.js
+    volumes:
+      - ./:/usr/src/app
+    working_dir: /usr/src/app
+    ports:
+      - "4000:4000"
+    depends_on:
+      - db
+
+volumes:
+  db_data:
+version: '3.9'
+services:
+  db:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Camaro@2053
+      POSTGRES_DB: cresco-local
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+
+  api:
+    build:
+      context: ./crm-cresco-be
+    ports:
+      - '4000:4000'
+    depends_on:
+      - db
+    volumes:
+      - ./crm-cresco-be:/usr/src/app
+    environment:
+      NODE_ENV: development
+    command: ["npm", "run", "dev"]
+
+volumes:
+  db-data:
