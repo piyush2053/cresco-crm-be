@@ -1,5 +1,5 @@
 import { query, getClient } from "../db.js";
-import { safeJson } from "../utils.js";
+import { safeJson, sendMail } from "../utils.js";
 
 const resources = {
   rules: { table: "settings_business_rules", fields: ["code","name","category","description","rule_type","formula","configuration","effective_from","effective_to","priority","is_active"] },
@@ -15,6 +15,8 @@ async function history(client, kind, id, key, before, after, user, reason) {
   await client.query("INSERT INTO settings_configuration_history(entity_type,entity_id,configuration_key,previous_value,new_value,changed_by,reason)VALUES($1,$2,$3,$4,$5,$6,$7)",[kind,id,key,before,after,user,reason||"Configuration updated"]);
 }
 export const SettingsService = {
+  async mailAdmins(){return list("SELECT id,name,email FROM users WHERE is_admin AND is_active AND email_verified ORDER BY name")},
+  async sendTestMail(userId){const admin=(await query("SELECT name,email FROM users WHERE id=$1 AND is_admin AND is_active AND email_verified",[userId])).rows[0];if(!admin)throw new Error("Please select a verified active admin.");await sendMail(admin.email,"Cresco CRM Test Email",`<p>Hello ${admin.name||"Admin"},</p><p>This is a test message from the active CRM email template.</p><p>If this email looks correct, future CRM notifications will use the same design.</p>`);return{message:`Test email sent to ${admin.name} (${admin.email}).`}},
   async overview(){const names=["settings_master_records","settings_business_rules","settings_number_series","settings_document_templates","settings_communication_templates","settings_approval_workflows","settings_access_permissions","settings_system_preferences"];const values=await Promise.all(names.map(x=>query(`SELECT count(*) count FROM ${x}`)));return Object.fromEntries(names.map((x,i)=>[x.replace("settings_","").replace("_records","").replaceAll("_"," "),+values[i].rows[0].count]))},
   async masterTypes(){return list("SELECT t.*,count(r.id)::int record_count FROM settings_master_types t LEFT JOIN settings_master_records r ON r.master_type_id=t.id GROUP BY t.id ORDER BY t.category,t.name")},
   async masterRecords(type){return list("SELECT r.*,t.code master_code,t.name master_name FROM settings_master_records r JOIN settings_master_types t ON t.id=r.master_type_id WHERE t.code=$1 ORDER BY r.sort_order,r.name",[type])},
