@@ -12,6 +12,22 @@ const mapUserFields = {
 };
 
 export const UsersService = {
+  async profile(id) {
+    const user=(await query("SELECT u.id,u.name,u.email,u.is_admin,u.is_active,u.email_verified,u.last_login,u.created_at,r.id role_id,r.name role_name,r.description role_description,r.permissions FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.id=$1",[id])).rows[0];
+    if(!user)return null;
+    const[access,activities]=await Promise.all([
+      query("SELECT scope_type,scope_key,permissions,conditions,updated_at FROM settings_access_permissions WHERE role_id=$1 ORDER BY scope_type,scope_key",[user.role_id]),
+      query(`SELECT * FROM(
+        SELECT 'Buyer' source,activity_type action,description detail,occurred_at happened_at FROM buyer_activities WHERE created_by=$1
+        UNION ALL SELECT 'Supplier',activity_type,description,occurred_at FROM supplier_activities WHERE created_by=$1
+        UNION ALL SELECT 'Sales',communication_type,message,created_at FROM sales_communications WHERE created_by=$1
+        UNION ALL SELECT 'Sales Stage','Stage Changed',concat_ws(' ',previous_stage,'→',new_stage,remarks),changed_at FROM sales_stage_history WHERE changed_by=$1
+        UNION ALL SELECT 'Finance',action,concat(entity_type,' #',entity_id),occurred_at FROM finance_audit_log WHERE user_id=$1
+        UNION ALL SELECT 'Settings','Configuration Changed',concat_ws(' · ',entity_type,configuration_key,reason),changed_at FROM settings_configuration_history WHERE changed_by=$1
+      )activity ORDER BY happened_at DESC LIMIT 100`,[id])
+    ]);
+    return safeJson({...user,granular_access:access.rows,activities:activities.rows});
+  },
   async list() {
     const result = await query(
       "SELECT id, name, email, role_id, is_admin, is_active, email_verified, last_login, created_at FROM users ORDER BY created_at DESC"

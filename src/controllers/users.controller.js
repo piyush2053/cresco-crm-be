@@ -2,6 +2,7 @@
 import { UsersService } from "../services/users.service.js";
 
 export const UsersController = {
+  async profile(req,res){const user=await UsersService.profile(req.user.id);if(!user)return res.status(404).json({message:"Profile not found."});return res.json(user)},
   async list(req, res) {
     const users = await UsersService.list();
     return res.json(users);

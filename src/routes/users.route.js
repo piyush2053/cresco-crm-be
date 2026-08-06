@@ -5,6 +5,7 @@ import { requiresAuth, requiresAdmin, requiresPermission } from "../middlewares.
 const router = Router();
 
 router.use(requiresAuth);
+router.get("/me/profile", UsersController.profile);
 router.get("/", requiresPermission("users", "read"), UsersController.list);
 router.get("/:id", requiresPermission("users", "read"), UsersController.get);
 router.post("/", requiresAdmin, UsersController.create);
