@@ -24,7 +24,7 @@ export const ReportsService = {
     };
   },
 
-  async createWeeklyReport() {
+  async createMonthlyReport() {
     const [buyers,suppliers,orders] = await Promise.all([
       query(`SELECT b.group_name,b.pan,b.gst_slab,b.state,b.group_tag,b.lead_manager,b.lifecycle_status,
         c.name primary_contact,c.mobile_number,c.email_address,b.created_at FROM buyers b LEFT JOIN buyer_contacts c ON c.buyer_id=b.id AND c.is_primary ORDER BY b.created_at DESC`),
@@ -79,15 +79,15 @@ export const ReportsService = {
     for(const ws of workbook.worksheets){ws.views=[{state:"frozen",ySplit:1}];ws.getRow(1).font={bold:true,color:{argb:"FFFFFFFF"}};ws.getRow(1).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF0F4C5C"}};ws.autoFilter={from:{row:1,column:1},to:{row:1,column:ws.columnCount}}}
 
     const buffer = await workbook.xlsx.writeBuffer();
-    await this.sendWeeklyReportToAdmin(buffer);
+    await this.sendMonthlyReportToAdmin(buffer);
     return buffer;
   },
 
-  async sendWeeklyReportToAdmin(buffer) {
+  async sendMonthlyReportToAdmin(buffer) {
     const admins = await query("SELECT email FROM users WHERE is_admin = TRUE AND email_verified = TRUE");
     if (admins.rowCount === 0) return;
     for (const row of admins.rows) {
-      await sendMail(row.email,"Cresco CRM Weekly Business Report",`<p>Hello,</p><p>Attached is the weekly CRM report containing complete Buyer, Supplier and Order data.</p><p>This report was generated in memory and is not stored on the server.</p>`,{attachments:[{filename:`cresco-weekly-report-${new Date().toISOString().slice(0,10)}.xlsx`,content:buffer,contentType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}]});
+      await sendMail(row.email,"Cresco CRM Monthly Business Report",`<p>Hello,</p><p>Attached is the monthly CRM report containing complete Buyer, Supplier and Order data.</p><p>This report was generated in memory and is not stored on the server.</p>`,{attachments:[{filename:`cresco-monthly-report-${new Date().toISOString().slice(0,10)}.xlsx`,content:buffer,contentType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}]});
     }
   },
 };
