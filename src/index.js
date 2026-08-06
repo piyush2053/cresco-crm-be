@@ -1,3 +1,4 @@
+import "./async-errors.js";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -39,7 +40,22 @@ app.use("/api/search", searchRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);
-  res.status(500).json({ message: "Server error." });
+  if(res.headersSent)return next(err);
+  const known={
+    "23505":[409,"This record already exists. Please use a unique value."],
+    "23503":[409,"This record is linked to other data and cannot be changed or removed."],
+    "23502":[400,"A required field is missing."],
+    "23514":[400,"The supplied value does not satisfy the business rules."],
+    "22P02":[400,"One or more values have an invalid format."],
+    "22007":[400,"The supplied date or time is invalid."],
+    "22008":[400,"The supplied date or time is outside the valid range."]
+  };
+  const mapped=known[err.code];
+  const validation=!err.code&&/invalid|required|unknown|unsupported|select|no worksheet/i.test(err.message||"");
+  const missing=!err.code&&/not found/i.test(err.message||"");
+  const status=mapped?.[0]||err.status||err.statusCode||(missing?404:validation?400:500);
+  const safeMessage=mapped?.[1]||(status<500?err.message:"The server could not complete this request. Please try again.");
+  res.status(status).json({message:safeMessage,code:err.code||"INTERNAL_ERROR"});
 });
 
 app.listen(config.app.port, () => {
