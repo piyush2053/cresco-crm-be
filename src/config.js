@@ -4,8 +4,8 @@ export const config = {
     apiUrl: 'http://localhost:4000',
     otpExpiresMinutes: 10,
     jwtSecret: 'rSdvHUATkxNXQxhpIUGYqqNMNsHpoFAdsIny3oFF9ts=',
-    jwtExpiresIn: '1h',
-    refreshExpiresIn: '7d',
+    jwtExpiresIn: '10h',
+    refreshExpiresIn: '10h',
   },
   db: {
     host: 'localhost',
@@ -18,8 +18,8 @@ export const config = {
     host: 'smtp.gmail.com',
     port: 587,
     secure: false,
-    user: 'yourgmail@gmail.com',
-    pass: 'yourapppassword',
-    from: 'Cresco CRM <yourgmail@gmail.com>',
+    user: 'help.cresco@gmail.com',
+    pass: 'lnby dvyu kaep suhw',
+    from: 'Cresco CRM <help.cresco@gmail.com>',
   },
 };

@@ -10,6 +10,8 @@ import logisticsRoutes from "./routes/logistics.route.js";
 import uploadsRoutes from "./routes/uploads.route.js";
 import reportsRoutes from "./routes/reports.route.js";
 import resourcesRoutes from "./routes/resources.route.js";
+import notificationsRoutes from "./routes/notifications.route.js";
+import { startSchedulers } from "./services/scheduler.service.js";
 import { config } from "./config.js";
 
 const app = express();
@@ -26,6 +28,7 @@ app.use("/api/suppliers", suppliersRoutes);
 app.use("/api/logistics", logisticsRoutes);
 app.use("/api/uploads", uploadsRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/notifications", notificationsRoutes);
 app.use("/api", resourcesRoutes);
 
 app.use((err, req, res, next) => {
@@ -35,4 +38,5 @@ app.use((err, req, res, next) => {
 
 app.listen(config.app.port, () => {
   console.log(`Server started at http://localhost:${config.app.port}`);
+  startSchedulers();
 });

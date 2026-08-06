@@ -31,23 +31,15 @@ export function generateOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-export async function sendMail(to, subject, html) {
-  const transporter = nodemailer.createTransport({
-    host: config.smtp.host,
-    port: config.smtp.port,
-    secure: config.smtp.secure,
-    auth: {
-      user: config.smtp.user,
-      pass: config.smtp.pass,
-    },
+export function createMailer() {
+  return nodemailer.createTransport({
+    host: config.smtp.host, port: config.smtp.port, secure: config.smtp.secure,
+    auth: { user: config.smtp.user, pass: config.smtp.pass },
   });
+}
 
-  await transporter.sendMail({
-    from: config.smtp.from,
-    to,
-    subject,
-    html,
-  });
+export async function sendMail(to, subject, html, options = {}) {
+  await createMailer().sendMail({ from: config.smtp.from, to, subject, html, ...options });
 }
 
 export function safeJson(value) {

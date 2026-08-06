@@ -1,5 +1,6 @@
 import { query, getClient } from "../db.js";
 import { hashPassword, safeJson } from "../utils.js";
+import { alertAdmins } from "./admin-alerts.service.js";
 
 const mapUserFields = {
   name: "name",
@@ -31,6 +32,12 @@ export const UsersService = {
     const result = await query(
       "INSERT INTO users (name, email, password, role_id, is_admin, is_active, email_verified) VALUES ($1, $2, $3, $4, $5, $6, TRUE) RETURNING id, name, email, role_id, is_admin, is_active, email_verified, created_at",
       [payload.name, payload.email, hashed, payload.roleId, payload.isAdmin ?? false, payload.isActive ?? true]
+    );
+    await alertAdmins(
+      "User created by admin",
+      `${payload.name} (${payload.email}) was added to the CRM.`,
+      "success",
+      "/settings"
     );
     return {
       status: 201,

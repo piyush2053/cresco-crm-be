@@ -10,6 +10,7 @@ import {
   safeJson,
 } from "../utils.js";
 import { config } from "../config.js";
+import { alertAdmins } from "./admin-alerts.service.js";
 
 export const AuthService = {
   async login(email, password) {
@@ -28,6 +29,7 @@ export const AuthService = {
       "UPDATE users SET refresh_token = $1, last_login = now() WHERE id = $2",
       [refreshToken, user.id]
     );
+    await alertAdmins("User login",`${user.name} (${email}) logged into the CRM.`,"info","/settings");
 
     return {
       status: 200,
@@ -50,6 +52,7 @@ export const AuthService = {
       "SELECT id, otp_code, otp_expires_at, is_admin, role_id FROM users WHERE email = $1",
       [email]
     );
+    await alertAdmins("New user created",`${name} (${email}) created a CRM account.`,"success","/settings");
     const user = result.rows[0];
     if (!user || user.otp_code !== otp || !user.otp_expires_at || new Date(user.otp_expires_at) < new Date()) {
       return { status: 400, body: { message: "Invalid or expired OTP." } };

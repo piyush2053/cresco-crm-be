@@ -1,0 +1,2 @@
+import{NotificationsService}from"./notifications.service.js";import{sendMail}from"../utils.js";
+export async function alertAdmins(title,message,type="info",link="/dashboard"){try{await NotificationsService.notifyAdmins(title,message,type,link);const admins=await NotificationsService.admins();await Promise.allSettled(admins.map(a=>sendMail(a.email,`Cresco CRM: ${title}`,`<p>Hello ${a.name||"Admin"},</p><p>${message}</p><p>Time: ${new Date().toLocaleString("en-IN",{timeZone:"Asia/Kolkata"})} IST</p>`)))}catch(e){console.error("Admin alert failed:",e.message)}}
