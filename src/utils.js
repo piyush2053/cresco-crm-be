@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import { config } from "./config.js";
+import { query } from "./db.js";
 
 export function hashPassword(password) {
   return bcrypt.hashSync(password, 10);
@@ -39,7 +40,12 @@ export function createMailer() {
 }
 
 export async function sendMail(to, subject, html, options = {}) {
-  await createMailer().sendMail({ from: config.smtp.from, to, subject, html, ...options });
+  let renderedSubject=subject,renderedHtml=html;
+  try{
+    const template=(await query("SELECT subject,body FROM settings_communication_templates WHERE channel='Email' AND is_active AND is_default ORDER BY updated_at DESC LIMIT 1")).rows[0];
+    if(template){const values={subject,content:html,sent_at:new Date().toLocaleString("en-IN",{timeZone:"Asia/Kolkata"})+" IST"},render=(text)=>String(text||"").replace(/{{\s*([a-z0-9_]+)\s*}}/gi,(_,key)=>values[key]??"");renderedSubject=render(template.subject)||subject;renderedHtml=render(template.body)}
+  }catch(error){console.error("Mail template fallback:",error.message)}
+  await createMailer().sendMail({ from: config.smtp.from, to, subject:renderedSubject, html:renderedHtml, ...options });
 }
 
 export function safeJson(value) {

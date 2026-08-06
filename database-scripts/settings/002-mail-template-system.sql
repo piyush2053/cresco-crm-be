@@ -1,0 +1,10 @@
+BEGIN;
+ALTER TABLE settings_communication_templates ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT FALSE;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_default_active_email_template ON settings_communication_templates((channel)) WHERE channel='Email' AND is_default AND is_active;
+UPDATE settings_communication_templates SET is_default=FALSE WHERE channel='Email';
+INSERT INTO settings_communication_templates(channel,template_type,name,subject,body,variables,is_active,is_default)
+VALUES('Email','Default CRM Wrapper','Cresco Professional Email','{{subject}}',
+'<!doctype html><html><body style="margin:0;background:#f3f6f8;font-family:Arial,sans-serif;color:#123b46"><table width="100%" cellpadding="0" cellspacing="0" role="presentation"><tr><td align="center" style="padding:32px 12px"><table width="620" cellpadding="0" cellspacing="0" role="presentation" style="max-width:620px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 8px 30px rgba(16,55,66,.10)"><tr><td style="background:#0f4c5c;padding:24px 32px;color:#ffffff"><div style="font-size:22px;font-weight:700;letter-spacing:.5px">CRESCO GLOBAL</div><div style="font-size:12px;opacity:.8;margin-top:4px">CRM Business Intelligence</div></td></tr><tr><td style="padding:32px"><h1 style="font-size:22px;margin:0 0 18px;color:#0f4c5c">{{subject}}</h1><div style="font-size:15px;line-height:1.7;color:#405c64">{{content}}</div><div style="margin-top:28px;padding:14px 16px;background:#f5f8f9;border-left:4px solid #f28c18;border-radius:6px;font-size:12px;color:#607780">Generated securely by Cresco CRM · {{sent_at}}</div></td></tr><tr><td style="padding:18px 32px;background:#eaf1f3;font-size:11px;color:#70868d;text-align:center">This is an automated business communication from Cresco CRM.</td></tr></table></td></tr></table></body></html>',
+'["subject","content","sent_at"]'::jsonb,TRUE,TRUE)
+ON CONFLICT(channel,name) DO UPDATE SET subject=EXCLUDED.subject,body=EXCLUDED.body,variables=EXCLUDED.variables,is_active=TRUE,is_default=TRUE,updated_at=now();
+COMMIT;
