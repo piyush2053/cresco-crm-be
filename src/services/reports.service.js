@@ -78,9 +78,7 @@ export const ReportsService = {
     });
     for(const ws of workbook.worksheets){ws.views=[{state:"frozen",ySplit:1}];ws.getRow(1).font={bold:true,color:{argb:"FFFFFFFF"}};ws.getRow(1).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF0F4C5C"}};ws.autoFilter={from:{row:1,column:1},to:{row:1,column:ws.columnCount}}}
 
-    const buffer = await workbook.xlsx.writeBuffer();
-    await this.sendMonthlyReportToAdmin(buffer);
-    return buffer;
+    return workbook.xlsx.writeBuffer();
   },
 
   async sendMonthlyReportToAdmin(buffer) {
