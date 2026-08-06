@@ -2,8 +2,18 @@ import ExcelJS from "exceljs";
 import { query } from "../db.js";
 import { config, } from "../config.js";
 import { sendMail } from "../utils.js";
+import { ActivityService } from "./activity.service.js";
 
 export const ReportsService = {
+  async userTime(month, userId, startDate, endDate) {
+    return ActivityService.monthly(month, userId, startDate, endDate);
+  },
+  async userTimeSessions(month, userId, startDate, endDate) {
+    return ActivityService.sessions(month, userId, startDate, endDate);
+  },
+  async userTimeDaily(month, userId, startDate, endDate) {
+    return ActivityService.daily(month, userId, startDate, endDate);
+  },
   async dashboard() {
     const [buyers, suppliers, orders, logistics, finance, recentOrders, deliveries, expiringPrices] = await Promise.all([
       query("SELECT count(*) total,count(*) FILTER(WHERE order_count>0) customers FROM buyers"),

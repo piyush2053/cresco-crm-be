@@ -1,5 +1,6 @@
 
 import { AuthService } from "../services/auth.service.js";
+import { ActivityService } from "../services/activity.service.js";
 
 export const AuthController = {
   async login(req, res) {
@@ -39,8 +40,12 @@ export const AuthController = {
   },
 
   async logout(req, res) {
-    const { refreshToken } = req.body;
-    const result = await AuthService.logout(refreshToken);
+    const { refreshToken, activitySessionId } = req.body;
+    const result = await AuthService.logout(refreshToken, activitySessionId);
     return res.status(result.status).json(result.body);
+  },
+  async heartbeat(req, res) {
+    await ActivityService.heartbeat(req.user.id, req.body.activitySessionId, Boolean(req.body.close));
+    return res.status(204).end();
   },
 };

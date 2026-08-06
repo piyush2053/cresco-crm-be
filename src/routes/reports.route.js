@@ -1,10 +1,13 @@
 import { Router } from "express";
 import { ReportsController } from "../controllers/reports.controller.js";
-import { requiresAuth, requiresPermission } from "../middlewares.js";
+import { requiresAdmin, requiresAuth, requiresPermission } from "../middlewares.js";
 
 const router = Router();
 
 router.use(requiresAuth);
+router.get("/user-time", requiresAdmin, ReportsController.userTime);
+router.get("/user-time/sessions", requiresAdmin, ReportsController.userTimeSessions);
+router.get("/user-time/daily", requiresAdmin, ReportsController.userTimeDaily);
 router.get("/monthly", requiresPermission("reports", "read"), ReportsController.monthlyReport);
 router.get("/dashboard", requiresPermission("dashboard", "read"), ReportsController.dashboard);
 router.get("/bi/catalog",requiresPermission("reports","read"),ReportsController.catalog);

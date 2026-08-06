@@ -3,6 +3,15 @@ import { ReportsService } from "../services/reports.service.js";
 import { BIService } from "../services/bi.service.js";
 
 export const ReportsController = {
+  async userTime(req, res) {
+    return res.json(await ReportsService.userTime(req.query.month, req.query.user_id, req.query.start_date, req.query.end_date));
+  },
+  async userTimeSessions(req, res) {
+    return res.json(await ReportsService.userTimeSessions(req.query.month, req.query.user_id, req.query.start_date, req.query.end_date));
+  },
+  async userTimeDaily(req, res) {
+    return res.json(await ReportsService.userTimeDaily(req.query.month, req.query.user_id, req.query.start_date, req.query.end_date));
+  },
   async monthlyReport(req, res) {
     const buffer = await ReportsService.createMonthlyReport();
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");

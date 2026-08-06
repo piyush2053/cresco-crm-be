@@ -11,6 +11,7 @@ import {
 } from "../utils.js";
 import { config } from "../config.js";
 import { alertAdmins } from "./admin-alerts.service.js";
+import { ActivityService } from "./activity.service.js";
 
 export const AuthService = {
   async login(email, password) {
@@ -29,6 +30,7 @@ export const AuthService = {
       "UPDATE users SET refresh_token = $1, last_login = now() WHERE id = $2",
       [refreshToken, user.id]
     );
+    const activitySessionId = await ActivityService.start(user.id);
     await alertAdmins("User login",`${user.name} (${email}) logged into the CRM.`,"info","/settings");
 
     return {
@@ -36,6 +38,7 @@ export const AuthService = {
       body: {
         token,
         refreshToken,
+        activitySessionId,
         user: safeJson({
           id: user.id,
           name: user.name,
@@ -131,13 +134,14 @@ export const AuthService = {
     }
   },
 
-  async logout(refreshToken) {
+  async logout(refreshToken, activitySessionId) {
     if (!refreshToken) {
       return { status: 200, body: { message: "Signed out successfully." } };
     }
 
     try {
       const payload = jwt.verify(refreshToken, config.app.jwtSecret);
+      await ActivityService.heartbeat(payload.userId, activitySessionId, true);
       await query(
         "UPDATE users SET refresh_token = NULL WHERE id = $1 AND refresh_token = $2",
         [payload.userId, refreshToken]
