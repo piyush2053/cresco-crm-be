@@ -43,14 +43,15 @@ export const BuyersService = {
   async get(id) {
     const buyer = (await query("SELECT *, GREATEST(0, CURRENT_DATE-call_date) days_since_last_call, GREATEST(0, next_call_date-CURRENT_DATE) follow_up_days, CASE WHEN order_count=0 THEN 'Prospect' WHEN last_order_date<CURRENT_DATE-180 THEN 'Dormant Customer' WHEN order_count=1 THEN 'Active Customer' ELSE 'Repeat Customer' END calculated_lifecycle_status FROM buyers WHERE id=$1", [id])).rows[0];
     if (!buyer) return null;
-    const [contacts, locations, interests, customFields, activities] = await Promise.all([
+    const [contacts, locations, interests, customFields, activities, transactions] = await Promise.all([
       query("SELECT * FROM buyer_contacts WHERE buyer_id=$1 ORDER BY is_primary DESC, created_at", [id]),
       query("SELECT * FROM buyer_locations WHERE buyer_id=$1 ORDER BY created_at", [id]),
       query("SELECT mv.* FROM buyer_master_links l JOIN buyer_master_values mv ON mv.id=l.master_value_id WHERE l.buyer_id=$1 ORDER BY mv.master_type,mv.label", [id]),
       query("SELECT d.id,d.field_key,d.label,d.field_type,d.options,v.value FROM buyer_custom_field_definitions d LEFT JOIN buyer_custom_field_values v ON v.definition_id=d.id AND v.buyer_id=$1 WHERE d.is_active ORDER BY d.sort_order,d.id", [id]),
       query("SELECT * FROM buyer_activities WHERE buyer_id=$1 ORDER BY occurred_at DESC LIMIT 100", [id]),
+      query("SELECT id,inquiry_number,inquiry_date,current_stage,status,(SELECT COALESCE(sum(quantity_kg*COALESCE(quoted_price,final_quotation_price)),0) FROM sales_transaction_products WHERE transaction_id=t.id) current_quote FROM sales_transactions t WHERE buyer_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC",[id]),
     ]);
-    return safeJson({ ...buyer, contacts: contacts.rows, locations: locations.rows, interests: interests.rows, custom_fields: customFields.rows, activities: activities.rows });
+    return safeJson({ ...buyer, contacts: contacts.rows, locations: locations.rows, interests: interests.rows, custom_fields: customFields.rows, activities: activities.rows, transactions: transactions.rows });
   },
 
   async create(payload, userId) {

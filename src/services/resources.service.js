@@ -1,6 +1,5 @@
 import { query } from "../db.js";
 const maps = {
-  orders: ["order_number","buyer_id","supplier_id","logistics_lane_id","product_category","grade","quantity_kg","sale_price_per_kg","purchase_price_per_kg","freight_per_kg","status","order_date","expected_delivery_date","remarks"],
   finance: ["reference_no","buyer_id","supplier_id","logistics_cost_id","freight_per_kg","amount","type","due_date","payment_status","remarks"]
 };
 export const ResourcesService = {

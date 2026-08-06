@@ -99,6 +99,7 @@ CREATE TRIGGER trg_buyer_primary_contact BEFORE INSERT OR UPDATE OF is_primary O
 \ir database-scripts/logistics/001-logistics-module.sql
 \ir database-scripts/core/001-retained-modules-and-orders.sql
 \ir database-scripts/core/002-notifications.sql
+\ir database-scripts/orders/001-complete-sales-order-module.sql
 
 -- enquiries
 
