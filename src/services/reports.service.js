@@ -10,7 +10,7 @@ export const ReportsService = {
       query("SELECT count(*) total FROM suppliers WHERE is_active"),
       query("SELECT count(*) total,COALESCE(sum(total_order_value),0) value,count(*) FILTER(WHERE status NOT IN ('Completed','Cancelled')) active FROM orders WHERE deleted_at IS NULL"),
       query("SELECT count(*) shipments,COALESCE(sum(total_logistics_cost),0) spend FROM logistics_cost_register"),
-      query("SELECT COALESCE(sum(amount) FILTER(WHERE payment_status<>'Paid'),0) outstanding,count(*) FILTER(WHERE payment_status<>'Paid' AND due_date<CURRENT_DATE) overdue FROM finance"),
+      query("SELECT COALESCE(sum(outstanding),0) outstanding,count(*) FILTER(WHERE outstanding>0 AND due_date<CURRENT_DATE) overdue FROM finance_receivables_view"),
       query("SELECT o.id,o.order_number,o.product_category,o.grade,o.quantity_kg,o.status,o.order_date,b.group_name buyer_name FROM orders o JOIN buyers b ON b.id=o.buyer_id WHERE o.deleted_at IS NULL ORDER BY o.created_at DESC LIMIT 8"),
       query("SELECT count(*) due FROM orders WHERE deleted_at IS NULL AND status NOT IN ('Completed','Cancelled') AND expected_delivery_date<=CURRENT_DATE+7"),
       query("SELECT count(*) expiring FROM supplier_grade_prices WHERE is_active AND expires_at BETWEEN now() AND now()+interval '12 hours'")

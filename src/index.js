@@ -9,9 +9,9 @@ import suppliersRoutes from "./routes/suppliers.route.js";
 import logisticsRoutes from "./routes/logistics.route.js";
 import uploadsRoutes from "./routes/uploads.route.js";
 import reportsRoutes from "./routes/reports.route.js";
-import resourcesRoutes from "./routes/resources.route.js";
 import notificationsRoutes from "./routes/notifications.route.js";
 import ordersRoutes from "./routes/orders.route.js";
+import financeRoutes from "./routes/finance.route.js";
 import { startSchedulers } from "./services/scheduler.service.js";
 import { config } from "./config.js";
 
@@ -31,7 +31,7 @@ app.use("/api/uploads", uploadsRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/api/orders", ordersRoutes);
-app.use("/api", resourcesRoutes);
+app.use("/api/finance", financeRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);
