@@ -97,6 +97,7 @@ CREATE TRIGGER trg_buyer_primary_contact BEFORE INSERT OR UPDATE OF is_primary O
 -- Complete Supplier procurement and pricing schema.
 \ir database-scripts/supplier/001-supplier-module.sql
 \ir database-scripts/logistics/001-logistics-module.sql
+\ir database-scripts/core/001-retained-modules-and-orders.sql
 
 -- enquiries
 
