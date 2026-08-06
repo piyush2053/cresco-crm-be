@@ -105,6 +105,7 @@ CREATE TRIGGER trg_buyer_primary_contact BEFORE INSERT OR UPDATE OF is_primary O
 \ir database-scripts/settings/002-mail-template-system.sql
 \ir database-scripts/reports/001-reports-bi.sql
 \ir database-scripts/search/001-global-search-indexes.sql
+\ir database-scripts/notifications/001-notification-archive.sql
 
 -- enquiries
 
