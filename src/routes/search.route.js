@@ -1,0 +1,1 @@
+import{Router}from"express";import{SearchController}from"../controllers/search.controller.js";import{requiresAuth}from"../middlewares.js";const r=Router();r.get("/",requiresAuth,SearchController.search);export default r;

@@ -1,0 +1,11 @@
+BEGIN;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX IF NOT EXISTS idx_search_buyers ON buyers USING gin(group_name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_search_suppliers ON suppliers USING gin(group_name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_search_orders ON orders USING gin(order_number gin_trgm_ops) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_search_sales ON sales_transactions USING gin(inquiry_number gin_trgm_ops) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_search_logistics ON logistics_lanes USING gin(lane_code gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_search_users ON users USING gin(name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_search_settings_masters ON settings_master_records USING gin(name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_search_reports ON bi_report_definitions USING gin(name gin_trgm_ops) WHERE is_active;
+COMMIT;

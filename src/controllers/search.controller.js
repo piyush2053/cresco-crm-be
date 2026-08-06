@@ -1,0 +1,1 @@
+import{SearchService}from"../services/search.service.js";export const SearchController={async search(req,res,next){try{res.json(await SearchService.search(req.query.q,req.query.limit))}catch(e){next(e)}}};
