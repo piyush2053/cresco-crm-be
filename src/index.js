@@ -12,6 +12,7 @@ import reportsRoutes from "./routes/reports.route.js";
 import notificationsRoutes from "./routes/notifications.route.js";
 import ordersRoutes from "./routes/orders.route.js";
 import financeRoutes from "./routes/finance.route.js";
+import settingsRoutes from "./routes/settings.route.js";
 import { startSchedulers } from "./services/scheduler.service.js";
 import { config } from "./config.js";
 
@@ -32,6 +33,7 @@ app.use("/api/reports", reportsRoutes);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/api/orders", ordersRoutes);
 app.use("/api/finance", financeRoutes);
+app.use("/api/settings", settingsRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);
