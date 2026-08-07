@@ -1,54 +1,86 @@
-version: '3.8'
-services:
-  db:
-    image: postgres:15
-    environment:
-      POSTGRES_DB: cresco_local
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: Camaro@2053
-    ports:
-      - "5432:5432"
-    volumes:
-      - db_data:/var/lib/postgresql/data
-  api:
-    build: .
-    command: node src/index.js
-    volumes:
-      - ./:/usr/src/app
-    working_dir: /usr/src/app
-    ports:
-      - "4000:4000"
-    depends_on:
-      - db
+name: cresco-crm
 
-volumes:
-  db_data:
-version: '3.9'
 services:
   db:
-    image: postgres:15
+    image: postgres:16-alpine
     restart: unless-stopped
+    env_file: .env.production
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: Camaro@2053
-      POSTGRES_DB: cresco-local
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - db-data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     ports:
-      - '5432:5432'
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   api:
     build:
-      context: ./crm-cresco-be
-    ports:
-      - '4000:4000'
-    depends_on:
-      - db
-    volumes:
-      - ./crm-cresco-be:/usr/src/app
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env.production
     environment:
-      NODE_ENV: development
-    command: ["npm", "run", "dev"]
+      NODE_ENV: production
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - app_uploads:/app/uploads
+      - app_backups:/app/backups
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    env_file: .env.production
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
-  db-data:
+  postgres_data:
+  app_uploads:
+  app_backups:
+  caddy_data:
+  caddy_config:

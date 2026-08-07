@@ -1,0 +1,60 @@
+name: Validate and deploy API
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cresco-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate JavaScript entry points
+        run: npm run check
+
+      - name: Validate production image
+        run: docker build --tag cresco-crm-be:${{ github.sha }} .
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/cresco_deploy
+          chmod 600 ~/.ssh/cresco_deploy
+          ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy on VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh -i ~/.ssh/cresco_deploy -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            'cd /opt/cresco-crm-be && git pull --ff-only origin main && docker compose --env-file .env.production up -d --build --remove-orphans && docker compose --env-file .env.production ps && curl --fail --silent --show-error --retry 10 --retry-delay 3 http://127.0.0.1:4000/'

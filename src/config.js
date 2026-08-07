@@ -1,25 +1,45 @@
+const production = process.env.NODE_ENV === "production";
+
+function value(name, fallback = "") {
+  const result = process.env[name] ?? fallback;
+  if (production && result === "") {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return result;
+}
+
+function numberValue(name, fallback) {
+  const parsed = Number(process.env[name] ?? fallback);
+  if (!Number.isFinite(parsed)) throw new Error(`${name} must be a number.`);
+  return parsed;
+}
+
 export const config = {
   app: {
-    port: 4000,
-    apiUrl: 'http://localhost:4000',
+    port: numberValue("PORT", 4000),
+    apiUrl: value("API_URL", "http://localhost:4000"),
+    corsOrigins: value("CORS_ORIGINS", "http://localhost:5173")
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean),
     otpExpiresMinutes: 10,
-    jwtSecret: 'rSdvHUATkxNXQxhpIUGYqqNMNsHpoFAdsIny3oFF9ts=',
-    jwtExpiresIn: '10h',
-    refreshExpiresIn: '10h',
+    jwtSecret: value("JWT_SECRET", "local-development-only-change-me"),
+    jwtExpiresIn: process.env.JWT_EXPIRES_IN || "10h",
+    refreshExpiresIn: process.env.REFRESH_EXPIRES_IN || "10h",
   },
   db: {
-    host: 'localhost',
-    port: 5432,
-    user: 'postgres',
-    password: 'Camaro@2053',
-    database: 'cresco_local',
+    host: value("DB_HOST", "localhost"),
+    port: numberValue("DB_PORT", 5432),
+    user: value("DB_USER", "postgres"),
+    password: value("DB_PASSWORD"),
+    database: value("DB_NAME", "cresco_local"),
   },
   smtp: {
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false,
-    user: 'help.cresco@gmail.com',
-    pass: 'lnby dvyu kaep suhw',
-    from: 'Cresco CRM <help.cresco@gmail.com>',
+    host: value("SMTP_HOST", "smtp.gmail.com"),
+    port: numberValue("SMTP_PORT", 587),
+    secure: String(process.env.SMTP_SECURE || "false").toLowerCase() === "true",
+    user: value("SMTP_USER"),
+    pass: value("SMTP_PASS"),
+    from: value("SMTP_FROM", "Cresco CRM <help.cresco@gmail.com>"),
   },
 };

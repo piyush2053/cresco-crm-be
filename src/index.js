@@ -19,7 +19,17 @@ import { startSchedulers } from "./services/scheduler.service.js";
 import { config } from "./config.js";
 
 const app = express();
-app.use(cors("*"));
+const allowedOrigins = new Set(config.app.corsOrigins);
+app.set("trust proxy", 1);
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.has("*") || allowedOrigins.has(origin)) return callback(null, true);
+    const error = new Error("This website is not allowed to access the CRM API.");
+    error.status = 403;
+    return callback(error);
+  },
+  credentials: true,
+}));
 app.use(express.json());
 app.use(cookieParser());
 

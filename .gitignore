@@ -11,9 +11,13 @@ node_modules
 dist
 dist-ssr
 *.local
-./package-lock.json
-package-lock.json
-.package-lock.json
+.env
+.env.*
+!.env.example
+backups/
+uploads/
+*.backup
+*.dump
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
