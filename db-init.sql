@@ -102,6 +102,7 @@ CREATE TRIGGER trg_buyer_primary_contact BEFORE INSERT OR UPDATE OF is_primary O
 \ir database-scripts/core/002-notifications.sql
 \ir database-scripts/orders/001-complete-sales-order-module.sql
 \ir database-scripts/finance/001-complete-finance-mis.sql
+\ir database-scripts/finance/002-delayed-payment-debit-notes.sql
 \ir database-scripts/settings/001-complete-settings-master-data.sql
 \ir database-scripts/settings/002-mail-template-system.sql
 \ir database-scripts/reports/001-reports-bi.sql
