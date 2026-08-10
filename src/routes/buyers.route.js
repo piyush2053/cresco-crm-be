@@ -6,6 +6,7 @@ const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:15*1024*102
 const router=Router(); router.use(requiresAuth);
 router.get("/masters",requiresPermission("buyers","read"),c.masters);
 router.get("/bulk-upload/template",requiresPermission("buyers","read"),c.downloadTemplate);
+router.post("/bulk-upload/analyze",requiresPermission("buyers","create"),upload.single("file"),c.analyzeUpload);
 router.post("/bulk-upload",requiresPermission("buyers","create"),upload.single("file"),c.bulkUpload);
 router.get("/",requiresPermission("buyers","read"),c.list); router.get("/:id",requiresPermission("buyers","read"),c.get);
 router.post("/",requiresPermission("buyers","create"),c.create); router.put("/:id",requiresPermission("buyers","update"),c.update); router.delete("/:id",requiresPermission("buyers","delete"),c.remove);

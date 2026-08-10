@@ -14,6 +14,10 @@ export const BuyersController = {
     if(!req.file)return res.status(400).json({message:"Please select an Excel file."});
     return res.json(await BuyersService.bulkUpload(req.file.originalname,req.file.buffer,req.user.id));
   },
+  async analyzeUpload(req,res){
+    if(!req.file)return res.status(400).json({message:"Please select an Excel file."});
+    return res.json(await BuyersService.analyzeUpload(req.file.originalname,req.file.buffer));
+  },
   async downloadTemplate(req,res){
     const buffer=await BuyersService.uploadTemplate();
     res.setHeader("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
