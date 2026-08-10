@@ -11,9 +11,9 @@ export async function requiresAuth(req, res, next) {
   const token = authHeader.replace("Bearer ", "");
   try {
     const payload = verifyToken(token);
-    const result = await query("SELECT id, email, role_id, is_admin FROM users WHERE id = $1", [payload.userId]);
+    const result = await query("SELECT id, email, role_id, is_admin, is_active FROM users WHERE id = $1", [payload.userId]);
     const user = result.rows[0];
-    if (!user) {
+    if (!user || !user.is_active) {
       return res.status(401).json({ message: "Invalid session." });
     }
     req.user = user;
@@ -38,6 +38,9 @@ export function requiresPermission(moduleName, permissionName) {
     if (!req.user) {
       return res.status(401).json({ message: "Authentication required." });
     }
+    // An active administrator is the system-level superuser. Role and granular
+    // rules apply to every other user, but must never accidentally revoke admin.
+    if (req.user.is_admin) return next();
     const result = await query("SELECT permissions FROM roles WHERE id = $1", [req.user.role_id]);
     const role = result.rows[0];
     if (!role) {
@@ -64,6 +67,7 @@ export function requiresPermission(moduleName, permissionName) {
 export function requiresScopedPermission(scopeType, scopeKey, action) {
   return async function(req,res,next){
     if(!req.user)return res.status(401).json({message:"Authentication required."});
+    if(req.user.is_admin)return next();
     const result=await query("SELECT permissions,conditions FROM settings_access_permissions WHERE role_id=$1 AND scope_type=$2 AND scope_key=$3",[req.user.role_id,scopeType,scopeKey]);
     if(!result.rows[0]?.permissions?.[action])return res.status(403).json({message:"Permission denied."});
     req.accessConditions=result.rows[0].conditions||{};next();

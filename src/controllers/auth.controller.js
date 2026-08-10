@@ -3,6 +3,7 @@ import { AuthService } from "../services/auth.service.js";
 import { ActivityService } from "../services/activity.service.js";
 
 export const AuthController = {
+  async session(req,res){const user=await AuthService.session(req.user.id);return user?res.json(user):res.status(401).json({message:"Invalid session."});},
   async login(req, res) {
     const { email, password } = req.body;
     const result = await AuthService.login(email, password);

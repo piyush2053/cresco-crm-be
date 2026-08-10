@@ -14,15 +14,21 @@ import { alertAdmins } from "./admin-alerts.service.js";
 import { ActivityService } from "./activity.service.js";
 
 export const AuthService = {
+  async session(userId) {
+    const user=(await query("SELECT u.id,u.name,u.email,u.role_id,u.is_admin,r.name role_name,r.permissions FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.id=$1 AND u.is_active",[userId])).rows[0];
+    if(!user) return null;
+    return safeJson({...user,permissions:user.permissions||{modules:{},actions:{}}});
+  },
   async login(email, password) {
     const result = await query(
-      "SELECT id, password, is_admin, role_id, email_verified, name FROM users WHERE email = $1",
+      "SELECT u.id,u.password,u.is_admin,u.is_active,u.role_id,u.email_verified,u.name,r.name role_name,r.permissions FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE lower(u.email)=lower($1)",
       [email]
     );
     const user = result.rows[0];
     if (!user || !comparePassword(password, user.password)) {
       return { status: 401, body: { message: "Invalid credentials." } };
     }
+    if (!user.is_active) return { status: 403, body: { message: "This account is inactive. Contact an administrator." } };
 
     const token = createToken({ userId: user.id });
     const refreshToken = createRefreshToken({ userId: user.id });
@@ -44,7 +50,9 @@ export const AuthService = {
           name: user.name,
           email,
           role_id: user.role_id,
+          role_name: user.role_name,
           is_admin: user.is_admin,
+          permissions: user.permissions || { modules: {}, actions: {} },
         }),
       },
     };

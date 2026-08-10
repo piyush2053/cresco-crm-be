@@ -5,6 +5,7 @@ import { requiresAuth } from '../middlewares.js';
 const router = Router();
 
 router.post('/login', AuthController.login);
+router.get('/session', requiresAuth, AuthController.session);
 router.post('/signup', AuthController.signup);
 router.post('/verify-otp', AuthController.verifyOtp);
 router.post('/forgot-password', AuthController.forgotPassword);
