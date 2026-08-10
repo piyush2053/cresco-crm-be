@@ -10,4 +10,14 @@ export const BuyersController = {
   async updateContact(req,res){return res.json(await BuyersService.updateContact(Number(req.params.id),Number(req.params.contactId),req.body));},
   async addLocation(req,res){return res.status(201).json(await BuyersService.addLocation(Number(req.params.id),req.body));},
   async masters(req,res){return res.json(await BuyersService.masters());},
+  async bulkUpload(req,res){
+    if(!req.file)return res.status(400).json({message:"Please select an Excel file."});
+    return res.json(await BuyersService.bulkUpload(req.file.originalname,req.file.buffer,req.user.id));
+  },
+  async downloadTemplate(req,res){
+    const buffer=await BuyersService.uploadTemplate();
+    res.setHeader("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition",'attachment; filename="buyer-gst-upload-template.xlsx"');
+    return res.send(buffer);
+  },
 };

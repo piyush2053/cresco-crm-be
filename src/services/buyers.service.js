@@ -1,9 +1,25 @@
-import { query } from "../db.js";
+import { query, getClient } from "../db.js";
 import { safeJson } from "../utils.js";
+import ExcelJS from "exceljs";
 
 const BUYER_FIELDS = ["group_name", "pan", "gst_slab", "state", "group_tag", "reference", "parent_location", "remark", "lead_manager", "lead_type", "monthly_consumption", "call_date", "next_call_date", "call_remark", "profile_shared", "quote_shared", "order_status", "credit_interest"];
 const CONTACT_FIELDS = ["name", "department", "designation", "mobile_number", "email_address", "whatsapp_number", "notes", "is_primary"];
 const LOCATION_FIELDS = ["name", "gst_number", "pan", "address", "city", "state", "delivery_preferences", "credit_terms"];
+const UPLOAD_HEADERS=["PAN","PAN to GST Status","GST","status","errdata","BUSINESS TYPE","data_basicDetails_aadharVerified","data_basicDetails_Legal_Name","data_basicDetails_gstin","data_basicDetails_Ekyc_Flag","data_basicDetails_compositionRate","BUSINESS CONSTITUTION","data_basicDetails_tradeNam","data_basicDetails_aadharVerDate","data_basicDetails_ctj","data_basicDetails_percentTaxInCash","data_basicDetails_mandatedeInvoice","data_basicDetails_aggreTurnOverFY","data_basicDetails_jurisdiction","data_basicDetails_registrationType","data_basicDetails_aggreTurnOver","data_basicDetails_cancelationDate","data_basicDetails_businessNature","data_basicDetails_registrationDate","data_basicDetails_registrationStatus","data_basicDetails_ekycVdt","data_basicDetails_percentTaxInCashFY","data_basicDetails_einvoiceStatus","data_basicDetails_memberDetails","data_basicDetails_mobile","data_basicDetails_email","data_hsnDetails_goods","data_branchDetails_permanentAdd_address","data_branchDetails_permanentAdd_dealsIn","data_branchDetails_additionalAdd"];
+const PAN_RE=/^[A-Z]{5}[0-9]{4}[A-Z]$/, GST_RE=/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/;
+const clean=v=>v===null||v===undefined?"":String(v).trim();
+const phone=v=>clean(v).replace(/\D/g,"").replace(/^91(?=\d{10}$)/,"");
+function jsonArray(value){try{const parsed=JSON.parse(clean(value)||"[]");return Array.isArray(parsed)?parsed:[]}catch{return []}}
+function stateFrom(row){const jurisdiction=clean(row.data_basicDetails_jurisdiction);const match=jurisdiction.match(/State\s*-\s*([^,]+)/i);return match?.[1]?.trim()||""}
+function businessType(value){const codes=clean(value).toUpperCase().split(/[:;,/\s]+/);const labels=[];if(codes.includes("TRD"))labels.push("TRADER");if(codes.includes("MFT"))labels.push("MANUFACTURER");return labels.join(", ")||clean(value)}
+async function parseBuyerWorkbook(buffer){
+  const workbook=new ExcelJS.Workbook();await workbook.xlsx.load(buffer);const sheet=workbook.worksheets[0];
+  if(!sheet)throw Object.assign(new Error("Uploaded file has no worksheet."),{status:400});
+  const actual=sheet.getRow(1).values.slice(1).map(clean);const missing=UPLOAD_HEADERS.filter(h=>!actual.includes(h));
+  if(missing.length)throw Object.assign(new Error(`Invalid Buyer file. Missing headings: ${missing.join(", ")}`),{status:400});
+  const rows=[];for(let n=2;n<=sheet.rowCount;n++){const values=sheet.getRow(n).values;const row={};actual.forEach((h,i)=>row[h]=values[i+1]??null);if(Object.values(row).some(v=>clean(v)))rows.push({rowNumber:n,data:row})}
+  if(!rows.length)throw Object.assign(new Error("The uploaded file has no data rows."),{status:400});return rows;
+}
 
 function addWhere(values, clauses, value, expression) {
   if (value === undefined || value === null || value === "") return;
@@ -44,8 +60,8 @@ export const BuyersService = {
     const buyer = (await query("SELECT *, GREATEST(0, CURRENT_DATE-call_date) days_since_last_call, GREATEST(0, next_call_date-CURRENT_DATE) follow_up_days, CASE WHEN order_count=0 THEN 'Prospect' WHEN last_order_date<CURRENT_DATE-180 THEN 'Dormant Customer' WHEN order_count=1 THEN 'Active Customer' ELSE 'Repeat Customer' END calculated_lifecycle_status FROM buyers WHERE id=$1", [id])).rows[0];
     if (!buyer) return null;
     const [contacts, locations, interests, customFields, activities, transactions] = await Promise.all([
-      query("SELECT * FROM buyer_contacts WHERE buyer_id=$1 ORDER BY is_primary DESC, created_at", [id]),
-      query("SELECT * FROM buyer_locations WHERE buyer_id=$1 ORDER BY created_at", [id]),
+      query("SELECT DISTINCT c.* FROM buyer_contacts c LEFT JOIN buyer_contact_locations cl ON cl.contact_id=c.id LEFT JOIN buyer_locations l ON l.id=cl.location_id WHERE c.buyer_id=$1 OR l.buyer_id=$1 ORDER BY c.is_primary DESC,c.created_at", [id]),
+      query("SELECT l.*,COALESCE(json_agg(json_build_object('contact_id',cl.contact_id,'phone_number',cl.phone_number,'email_address',cl.email_address)) FILTER (WHERE cl.contact_id IS NOT NULL),'[]') contacts FROM buyer_locations l LEFT JOIN buyer_contact_locations cl ON cl.location_id=l.id WHERE l.buyer_id=$1 GROUP BY l.id ORDER BY l.created_at", [id]),
       query("SELECT mv.* FROM buyer_master_links l JOIN buyer_master_values mv ON mv.id=l.master_value_id WHERE l.buyer_id=$1 ORDER BY mv.master_type,mv.label", [id]),
       query("SELECT d.id,d.field_key,d.label,d.field_type,d.options,v.value FROM buyer_custom_field_definitions d LEFT JOIN buyer_custom_field_values v ON v.definition_id=d.id AND v.buyer_id=$1 WHERE d.is_active ORDER BY d.sort_order,d.id", [id]),
       query("SELECT * FROM buyer_activities WHERE buyer_id=$1 ORDER BY occurred_at DESC LIMIT 100", [id]),
@@ -99,4 +115,24 @@ export const BuyersService = {
   },
   async remove(id) { await query("DELETE FROM buyers WHERE id=$1", [id]); return { message: "Buyer removed." }; },
   async masters() { return (await query("SELECT * FROM buyer_master_values WHERE is_active ORDER BY master_type,label")).rows.map(safeJson); },
+  async uploadTemplate(){const wb=new ExcelJS.Workbook(),sheet=wb.addWorksheet("Buyer GST Upload");sheet.addRow(UPLOAD_HEADERS);sheet.getRow(1).font={bold:true};sheet.views=[{state:"frozen",ySplit:1}];sheet.columns=UPLOAD_HEADERS.map(h=>({header:h,key:h,width:Math.min(Math.max(h.length+2,16),42)}));return wb.xlsx.writeBuffer()},
+  async bulkUpload(filename,buffer,userId){
+    if(!/\.xlsx$/i.test(filename))throw Object.assign(new Error("Only .xlsx Buyer files are supported."),{status:400});
+    const input=await parseBuyerWorkbook(buffer),client=await getClient();const stats={rows:input.length,groupsCreated:0,groupsUpdated:0,locationsCreated:0,locationsUpdated:0,contactsCreated:0,contactsReused:0,linksCreated:0,skipped:0,errors:[]};
+    try{await client.query("BEGIN");for(const item of input){const r=item.data,pan=clean(r.PAN).toUpperCase(),gst=clean(r.data_basicDetails_gstin||r.GST).toUpperCase();
+      if(clean(r.status).toUpperCase()!=="SUCCESS"){stats.skipped++;stats.errors.push({row:item.rowNumber,message:clean(r.errdata)||"Source row status is not SUCCESS"});continue}
+      if(!PAN_RE.test(pan)||!GST_RE.test(gst)){stats.skipped++;stats.errors.push({row:item.rowNumber,message:"Invalid PAN or GSTIN"});continue}
+      const groupName=clean(r.data_basicDetails_tradeNam)||clean(r.data_basicDetails_Legal_Name)||pan;
+      let group=(await client.query("SELECT id FROM buyers WHERE upper(pan)=$1",[pan])).rows[0];
+      if(!group){group=(await client.query("INSERT INTO buyers(group_name,pan,state,gst_slab) VALUES($1,$2,$3,$4) RETURNING id",[groupName,pan,stateFrom(r),clean(r.data_basicDetails_compositionRate)])).rows[0];stats.groupsCreated++}else{await client.query("UPDATE buyers SET group_name=COALESCE(NULLIF($2,''),group_name),state=COALESCE(NULLIF($3,''),state),updated_at=now() WHERE id=$1",[group.id,groupName,stateFrom(r)]);stats.groupsUpdated++}
+      let location=(await client.query("SELECT id FROM buyer_locations WHERE upper(gst_number)=$1",[gst])).rows[0];const locationValues=[group.id,groupName,gst,pan,clean(r.data_branchDetails_permanentAdd_address),stateFrom(r),businessType(r["BUSINESS TYPE"]),clean(r.data_basicDetails_aggreTurnOver),"data_basicDetails_aggreTurnOver",clean(r.data_basicDetails_registrationStatus),clean(r["BUSINESS CONSTITUTION"])];
+      if(!location){location=(await client.query("INSERT INTO buyer_locations(buyer_id,name,gst_number,pan,address,state,business_type,turnover,turnover_heading,registration_status,business_constitution) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id",locationValues)).rows[0];stats.locationsCreated++}else{await client.query("UPDATE buyer_locations SET buyer_id=$1,name=$2,pan=$4,address=$5,state=$6,business_type=$7,turnover=$8,turnover_heading=$9,registration_status=$10,business_constitution=$11,updated_at=now() WHERE id=$3",[...locationValues.slice(0,2),location.id,...locationValues.slice(3)]);stats.locationsUpdated++}
+      const names=jsonArray(r.data_basicDetails_memberDetails).map(clean).filter(Boolean);if(!names.length)names.push(clean(r.data_basicDetails_Legal_Name)||groupName);const rowPhone=phone(r.data_basicDetails_mobile),rowEmail=clean(r.data_basicDetails_email).toLowerCase();
+      for(let i=0;i<names.length;i++){const p=i===0?rowPhone:"",email=i===0?rowEmail:"";let contact=p?(await client.query("SELECT id FROM buyer_contacts WHERE regexp_replace(mobile_number,'[^0-9]','','g')=$1 ORDER BY id LIMIT 1",[p])).rows[0]:null;if(!contact)contact=(await client.query("SELECT id FROM buyer_contacts WHERE buyer_id=$1 AND lower(btrim(name))=lower($2) ORDER BY id LIMIT 1",[group.id,names[i]])).rows[0];
+        if(!contact){contact=(await client.query("INSERT INTO buyer_contacts(buyer_id,name,mobile_number,email_address,is_primary) VALUES($1,$2,$3,$4,$5) RETURNING id",[group.id,names[i],p||null,email||null,i===0&&!((await client.query("SELECT 1 FROM buyer_contacts WHERE buyer_id=$1 AND is_primary",[group.id])).rowCount)])).rows[0];stats.contactsCreated++}else stats.contactsReused++;
+        const linked=await client.query("INSERT INTO buyer_contact_locations(contact_id,location_id,phone_number,email_address,source_row) VALUES($1,$2,$3,$4,$5) ON CONFLICT(contact_id,location_id) DO UPDATE SET phone_number=EXCLUDED.phone_number,email_address=EXCLUDED.email_address,source_row=EXCLUDED.source_row,updated_at=now() RETURNING (xmax=0) inserted",[contact.id,location.id,p||null,email||null,item.rowNumber]);if(linked.rows[0]?.inserted)stats.linksCreated++;
+      }
+      await client.query("INSERT INTO buyer_activities(buyer_id,activity_type,description,metadata,created_by) VALUES($1,'bulk_upload','Buyer data synced from Excel',$2,$3)",[group.id,JSON.stringify({filename,row:item.rowNumber,gstin:gst}),userId]);
+    }await client.query("COMMIT");return stats}catch(error){await client.query("ROLLBACK");throw error}finally{client.release()}
+  },
 };

@@ -93,6 +93,7 @@ BEGIN
   RETURN NEW;
 END $$;
 CREATE TRIGGER trg_buyer_primary_contact BEFORE INSERT OR UPDATE OF is_primary ON buyer_contacts FOR EACH ROW EXECUTE FUNCTION buyer_keep_one_primary_contact();
+\ir database-scripts/buyers/001-buyer-bulk-upload.sql
 
 -- Complete Supplier procurement and pricing schema.
 \ir database-scripts/supplier/001-supplier-module.sql
