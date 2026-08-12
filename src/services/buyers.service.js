@@ -65,7 +65,7 @@ export const BuyersService = {
       query("SELECT DISTINCT c.* FROM buyer_contacts c LEFT JOIN buyer_contact_locations cl ON cl.contact_id=c.id LEFT JOIN buyer_locations l ON l.id=cl.location_id WHERE c.buyer_id=$1 OR l.buyer_id=$1 ORDER BY c.is_primary DESC,c.created_at", [id]),
       query("SELECT l.*,COALESCE(json_agg(json_build_object('contact_id',cl.contact_id,'phone_number',cl.phone_number,'email_address',cl.email_address)) FILTER (WHERE cl.contact_id IS NOT NULL),'[]') contacts FROM buyer_locations l LEFT JOIN buyer_contact_locations cl ON cl.location_id=l.id WHERE l.buyer_id=$1 GROUP BY l.id ORDER BY l.created_at", [id]),
       query("SELECT mv.* FROM buyer_master_links l JOIN buyer_master_values mv ON mv.id=l.master_value_id WHERE l.buyer_id=$1 ORDER BY mv.master_type,mv.label", [id]),
-      query("SELECT d.id,d.field_key,d.label,d.field_type,d.options,v.value FROM buyer_custom_field_definitions d LEFT JOIN buyer_custom_field_values v ON v.definition_id=d.id AND v.buyer_id=$1 WHERE d.is_active ORDER BY d.sort_order,d.id", [id]),
+      query("SELECT d.id,d.field_key,d.label,d.field_type,d.options,d.is_required,v.value FROM buyer_custom_field_definitions d LEFT JOIN buyer_custom_field_values v ON v.definition_id=d.id AND v.buyer_id=$1 WHERE d.is_active ORDER BY d.sort_order,d.id", [id]),
       query("SELECT * FROM buyer_activities WHERE buyer_id=$1 ORDER BY occurred_at DESC LIMIT 100", [id]),
       query("SELECT id,inquiry_number,inquiry_date,current_stage,status,(SELECT COALESCE(sum(quantity_kg*COALESCE(quoted_price,final_quotation_price)),0) FROM sales_transaction_products WHERE transaction_id=t.id) current_quote FROM sales_transactions t WHERE buyer_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC",[id]),
     ]);
@@ -92,6 +92,7 @@ export const BuyersService = {
       await query(`UPDATE buyers SET ${fields.map((f, i) => `${f}=$${i + 1}`).join(",")},updated_at=now() WHERE id=$${values.length}`, values);
     }
     if (payload.interest_ids) await this.setInterests(id, payload.interest_ids);
+    if (payload.custom_fields && typeof payload.custom_fields === "object") for (const [fieldKey,value] of Object.entries(payload.custom_fields)) await query(`INSERT INTO buyer_custom_field_values(buyer_id,definition_id,value)SELECT $1,id,$3 FROM buyer_custom_field_definitions WHERE field_key=$2 AND is_active ON CONFLICT(buyer_id,definition_id)DO UPDATE SET value=EXCLUDED.value`,[id,fieldKey,value]);
     await query("INSERT INTO buyer_activities (buyer_id,activity_type,description,created_by) VALUES ($1,'buyer_updated','Buyer profile updated',$2)", [id, userId]);
     return this.get(id);
   },
