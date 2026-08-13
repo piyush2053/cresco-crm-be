@@ -31,3 +31,8 @@ This backend is designed for a simple Node.js + Express + PostgreSQL CRM system 
 Uske baad login use karo:
 Email: admin@cresco.local
 Password: Cresco@2026
+
+local pr db connect krne ke liye Alg bash me 
+ye chala dena
+
+$ ssh -N -L 55432:127.0.0.1:5432 deploy@50.6.45.98

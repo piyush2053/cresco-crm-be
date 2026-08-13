@@ -38,9 +38,6 @@ export function requiresPermission(moduleName, permissionName) {
     if (!req.user) {
       return res.status(401).json({ message: "Authentication required." });
     }
-    // An active administrator is the system-level superuser. Role and granular
-    // rules apply to every other user, but must never accidentally revoke admin.
-    if (req.user.is_admin) return next();
     const result = await query("SELECT permissions FROM roles WHERE id = $1", [req.user.role_id]);
     const role = result.rows[0];
     if (!role) {
@@ -55,8 +52,9 @@ export function requiresPermission(moduleName, permissionName) {
     const permissions = role.permissions || {};
     const modules = permissions.modules || {};
     const actions = permissions.actions || {};
-    const moduleAllowed = modules[moduleName] !== false;
-    const actionAllowed = actions[permissionName] !== false;
+    const moduleAllowed = modules[moduleName] === true;
+    // Actions are an allow-list: absent, null and false all mean denied.
+    const actionAllowed = actions[permissionName] === true;
     if (!moduleAllowed || !actionAllowed) {
       return res.status(403).json({ message: "Permission denied." });
     }

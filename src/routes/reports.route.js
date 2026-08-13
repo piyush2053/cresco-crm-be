@@ -8,7 +8,7 @@ router.use(requiresAuth);
 router.get("/user-time", requiresAdmin, ReportsController.userTime);
 router.get("/user-time/sessions", requiresAdmin, ReportsController.userTimeSessions);
 router.get("/user-time/daily", requiresAdmin, ReportsController.userTimeDaily);
-router.get("/monthly", requiresPermission("reports", "read"), ReportsController.monthlyReport);
+router.get("/monthly", requiresPermission("reports", "export"), ReportsController.monthlyReport);
 router.get("/dashboard", requiresPermission("dashboard", "read"), ReportsController.dashboard);
 router.get("/bi/catalog",requiresPermission("reports","read"),ReportsController.catalog);
 router.get("/bi/definitions",requiresPermission("reports","read"),ReportsController.reports);
