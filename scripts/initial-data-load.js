@@ -7,6 +7,7 @@ const mode=process.argv[2],file=process.argv[3];
 const PAN=/^[A-Z]{5}[0-9]{4}[A-Z]$/,GST=/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/;
 const scalar=v=>v&&typeof v==="object"&&"result"in v?v.result:v;
 const text=v=>scalar(v)===null||scalar(v)===undefined?"":String(scalar(v)).trim(),upper=v=>text(v).toUpperCase(),num=v=>text(v)===""?null:Number(scalar(v)),yes=v=>["yes","y","true","1"].includes(text(v).toLowerCase());
+const contactDesignation=r=>text(r["Designation"])||({"LIMITED LIABILITY PARTNERSHIP":"Designated Partner","PUBLIC SECTOR UNDERTAKING":"Director"}[upper(r["Company Type"])]||"");
 const isoDate=v=>{if(v===null||v===undefined||text(v)==="")return null;if(v instanceof Date&&!Number.isNaN(v.valueOf()))return v.toISOString().slice(0,10);const s=text(v);if(/^\d{4}-\d{2}-\d{2}$/.test(s)){const d=new Date(`${s}T00:00:00Z`);return !Number.isNaN(d.valueOf())&&d.toISOString().slice(0,10)===s?s:null}return null};
 const finiteNumber=v=>num(v)!==null&&Number.isFinite(num(v));
 const sheets={
@@ -43,8 +44,8 @@ async function upsertBuyer(c,r,sourceRow){
  const l=(await c.query("INSERT INTO buyer_locations(buyer_id,name,gst_number,pan,address,state,business_type,turnover,turnover_heading,business_constitution)VALUES($1,$2,$3,$4,$5,$6,$7,$8,'Turnover',$9)ON CONFLICT(upper(gst_number))WHERE gst_number IS NOT NULL AND btrim(gst_number)<>'' DO UPDATE SET buyer_id=EXCLUDED.buyer_id,name=EXCLUDED.name,address=EXCLUDED.address,state=EXCLUDED.state,business_type=EXCLUDED.business_type,turnover=EXCLUDED.turnover,business_constitution=EXCLUDED.business_constitution,updated_at=now()RETURNING id",[b.id,text(r["Location Name"])||text(r["Group Name*"]),gst,pan,text(r["Address*"]),text(r["State*"]),text(r["Business Type"]),text(r["Turnover"]),text(r["Company Type"])])).rows[0];
  for(const[index,name]of names.entries()){
   let p=(await c.query("SELECT id FROM buyer_contacts WHERE buyer_id=$1 AND lower(name)=lower($2) LIMIT 1",[b.id,name])).rows[0];
-  if(p){await c.query("UPDATE buyer_contacts SET designation=$1,mobile_number=$2,email_address=$3,is_primary=$4,updated_at=now() WHERE id=$5",[text(r["Designation"]),phone,text(r["Email"]),yes(r["Is Primary Contact"])&&index===0,p.id])}
-  else p=(await c.query("INSERT INTO buyer_contacts(buyer_id,name,designation,mobile_number,email_address,is_primary)VALUES($1,$2,$3,$4,$5,$6)RETURNING id",[b.id,name,text(r["Designation"]),phone,text(r["Email"]),yes(r["Is Primary Contact"])&&index===0])).rows[0];
+  if(p){await c.query("UPDATE buyer_contacts SET designation=$1,mobile_number=$2,email_address=$3,is_primary=$4,updated_at=now() WHERE id=$5",[contactDesignation(r),phone,text(r["Email"]),yes(r["Is Primary Contact"])&&index===0,p.id])}
+  else p=(await c.query("INSERT INTO buyer_contacts(buyer_id,name,designation,mobile_number,email_address,is_primary)VALUES($1,$2,$3,$4,$5,$6)RETURNING id",[b.id,name,contactDesignation(r),phone,text(r["Email"]),yes(r["Is Primary Contact"])&&index===0])).rows[0];
   await c.query("INSERT INTO buyer_contact_locations(contact_id,location_id,phone_number,email_address,source_row)VALUES($1,$2,$3,$4,$5)ON CONFLICT(contact_id,location_id)DO UPDATE SET phone_number=EXCLUDED.phone_number,email_address=EXCLUDED.email_address,source_row=EXCLUDED.source_row,updated_at=now()",[p.id,l.id,phone,text(r["Email"]),sourceRow]);
  }
  return b.id;
