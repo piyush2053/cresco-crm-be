@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import { query } from "../db.js";
 import { config, } from "../config.js";
-import { sendMail } from "../utils.js";
+import { EmailNotificationsService } from "./email-notifications.service.js";
 import { ActivityService } from "./activity.service.js";
 
 export const ReportsService = {
@@ -94,8 +94,6 @@ export const ReportsService = {
   async sendMonthlyReportToAdmin(buffer) {
     const admins = await query("SELECT email FROM users WHERE is_admin = TRUE AND email_verified = TRUE");
     if (admins.rowCount === 0) return;
-    for (const row of admins.rows) {
-      await sendMail(row.email,"Cresco CRM Monthly Business Report",`<p>Hello,</p><p>Attached is the monthly CRM report containing complete Buyer, Supplier and Order data.</p><p>This report was generated in memory and is not stored on the server.</p>`,{attachments:[{filename:`cresco-monthly-report-${new Date().toISOString().slice(0,10)}.xlsx`,content:buffer,contentType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}]});
-    }
+    await EmailNotificationsService.dispatch("monthly_business_report",{title:"Monthly report sent",message:"Buyer, Supplier and Order Excel report was generated.",type:"success",link:"/reports",subject:"Cresco CRM Monthly Business Report",html:"<p>Hello,</p><p>Attached is the monthly CRM report containing complete Buyer, Supplier and Order data.</p><p>This report was generated in memory and is not stored on the server.</p>",recipients:admins.rows.map(x=>x.email),attachments:[{filename:`cresco-monthly-report-${new Date().toISOString().slice(0,10)}.xlsx`,content:buffer,contentType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}]});
   },
 };

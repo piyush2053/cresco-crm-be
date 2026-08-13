@@ -6,11 +6,10 @@ import {
   createToken,
   createRefreshToken,
   generateOtp,
-  sendMail,
   safeJson,
 } from "../utils.js";
 import { config } from "../config.js";
-import { alertAdmins } from "./admin-alerts.service.js";
+import { EmailNotificationsService } from "./email-notifications.service.js";
 import { ActivityService } from "./activity.service.js";
 
 export const AuthService = {
@@ -37,7 +36,7 @@ export const AuthService = {
       [refreshToken, user.id]
     );
     const activitySessionId = await ActivityService.start(user.id);
-    await alertAdmins("User login",`${user.name} (${email}) logged into the CRM.`,"info","/settings");
+    await EmailNotificationsService.dispatch("user_login",{title:"User login",message:`${user.name} (${email}) logged into the CRM.`,type:"info",link:"/settings",subject:"Cresco CRM: User login",html:`<p>${user.name} (${email}) logged into the CRM.</p>`});
 
     return {
       status: 200,
@@ -63,7 +62,6 @@ export const AuthService = {
       "SELECT id, otp_code, otp_expires_at, is_admin, role_id FROM users WHERE email = $1",
       [email]
     );
-    await alertAdmins("New user created",`${name} (${email}) created a CRM account.`,"success","/settings");
     const user = result.rows[0];
     if (!user || user.otp_code !== otp || !user.otp_expires_at || new Date(user.otp_expires_at) < new Date()) {
       return { status: 400, body: { message: "Invalid or expired OTP." } };
@@ -104,11 +102,8 @@ export const AuthService = {
     const token = createToken({ userId: user.id });
     const expiresAt = new Date(Date.now() + 3600_000);
     await query("UPDATE users SET reset_token = $1, reset_expires_at = $2 WHERE id = $3", [token, expiresAt, user.id]);
-    await sendMail(
-      email,
-      "Reset your Cresco CRM password",
-      `<p>Use this link to reset your password: <strong>${config.app.apiUrl}/reset-password?token=${token}</strong></p>`
-    );
+    const resetUrl=`${config.app.frontendUrl.replace(/\/$/,"")}/reset-password?token=${encodeURIComponent(token)}`;
+    await EmailNotificationsService.dispatch("password_reset",{actorEmail:email,subject:"Reset your Cresco CRM password",html:`<p>We received a request to reset your Cresco CRM password.</p><p><a href="${resetUrl}">Reset your password</a></p><p>This link expires in one hour. If you did not request this, you can ignore this email.</p>`});
     return { status: 200, body: { message: "Reset instructions sent if email exists." } };
   },
 

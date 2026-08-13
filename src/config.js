@@ -18,6 +18,7 @@ export const config = {
   app: {
     port: numberValue("PORT", 4000),
     apiUrl: value("API_URL", "http://localhost:4000"),
+    frontendUrl: value("FRONTEND_URL", "http://localhost:5173"),
     corsOrigins: value("CORS_ORIGINS", "http://localhost:5173")
       .split(",")
       .map((origin) => origin.trim())

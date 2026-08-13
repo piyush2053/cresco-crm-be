@@ -1,6 +1,6 @@
 import { query, getClient } from "../db.js";
 import { hashPassword, safeJson } from "../utils.js";
-import { alertAdmins } from "./admin-alerts.service.js";
+import { EmailNotificationsService } from "./email-notifications.service.js";
 
 const mapUserFields = {
   name: "name",
@@ -53,7 +53,7 @@ export const UsersService = {
         "INSERT INTO users (name, email, password, role_id, is_admin, is_active, email_verified) VALUES ($1, lower($2), $3, $4, $5, $6, TRUE) RETURNING id, name, email, role_id, is_admin, is_active, email_verified, created_at",
         [payload.name, payload.email, hashed, payload.roleId, payload.isAdmin ?? false, payload.isActive ?? true]
       );
-      await alertAdmins("User created by admin",`${payload.name} (${payload.email}) was added to the CRM.`,"success","/settings");
+      await EmailNotificationsService.dispatch("user_created",{title:"User created by admin",message:`${payload.name} (${payload.email}) was added to the CRM.`,type:"success",link:"/settings",subject:"Cresco CRM: User created by admin",html:`<p>${payload.name} (${payload.email}) was added to the CRM.</p>`});
       return {status:201,body:result.rows[0]};
     } catch(error) {
       if(error.code==="23505"&&error.constraint==="users_email_key")return{status:409,body:{message:"A user with this email address already exists."}};
