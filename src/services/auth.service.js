@@ -14,13 +14,13 @@ import { ActivityService } from "./activity.service.js";
 
 export const AuthService = {
   async session(userId) {
-    const user=(await query("SELECT u.id,u.name,u.email,u.role_id,u.is_admin,r.name role_name,r.permissions FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.id=$1 AND u.is_active",[userId])).rows[0];
+    const user=(await query("SELECT u.id,u.name,u.email,u.role_id,u.is_admin,r.name role_name,r.permissions FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.id=$1 AND u.is_active AND u.deleted_at IS NULL",[userId])).rows[0];
     if(!user) return null;
     return safeJson({...user,permissions:user.permissions||{modules:{},actions:{}}});
   },
   async login(email, password) {
     const result = await query(
-      "SELECT u.id,u.password,u.is_admin,u.is_active,u.role_id,u.email_verified,u.name,r.name role_name,r.permissions FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE lower(u.email)=lower($1)",
+      "SELECT u.id,u.password,u.is_admin,u.is_active,u.role_id,u.email_verified,u.name,r.name role_name,r.permissions FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE lower(u.email)=lower($1) AND u.deleted_at IS NULL",
       [email]
     );
     const user = result.rows[0];
@@ -28,6 +28,7 @@ export const AuthService = {
       return { status: 401, body: { message: "Invalid credentials." } };
     }
     if (!user.is_active) return { status: 403, body: { message: "This account is inactive. Contact an administrator." } };
+    if (!user.email_verified) return { status: 403, body: { message: "Verify your email before signing in. Enter the OTP sent to your email.", verificationRequired: true, email } };
 
     const token = createToken({ userId: user.id });
     const refreshToken = createRefreshToken({ userId: user.id });
@@ -59,7 +60,7 @@ export const AuthService = {
 
   async verifyOtp(email, otp) {
     const result = await query(
-      "SELECT id, otp_code, otp_expires_at, is_admin, role_id FROM users WHERE email = $1",
+      "SELECT u.id,u.name,u.email,u.otp_code,u.otp_expires_at,u.is_admin,u.role_id,r.name role_name,r.permissions FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE lower(u.email)=lower($1) AND u.is_active AND u.deleted_at IS NULL",
       [email]
     );
     const user = result.rows[0];
@@ -73,23 +74,20 @@ export const AuthService = {
       "UPDATE users SET otp_code = NULL, otp_expires_at = NULL, refresh_token = $1, email_verified = TRUE, last_login = now() WHERE id = $2",
       [refreshToken, user.id]
     );
-    return { status: 200, body: { token, refreshToken } };
+    const activitySessionId=await ActivityService.start(user.id);
+    return { status: 200, body: { token,refreshToken,activitySessionId,user:safeJson({id:user.id,name:user.name,email:user.email,role_id:user.role_id,role_name:user.role_name,is_admin:user.is_admin,permissions:user.permissions||{modules:{},actions:{}}}) } };
+  },
+  async resendVerification(email) {
+    const user=(await query("SELECT id,name,email,email_verified,is_active FROM users WHERE lower(email)=lower($1) AND deleted_at IS NULL",[email])).rows[0];
+    if(!user||user.email_verified||!user.is_active)return{status:200,body:{message:"If this account requires verification, a new OTP was sent."}};
+    const otp=generateOtp(),expiresAt=new Date(Date.now()+config.app.otpExpiresMinutes*60*1000);
+    await query("UPDATE users SET otp_code=$1,otp_expires_at=$2 WHERE id=$3",[otp,expiresAt,user.id]);
+    await EmailNotificationsService.dispatch("email_verification",{actorEmail:user.email,recipients:[user.email],subject:"Your new Cresco CRM verification OTP",html:`<p>Hello ${user.name},</p><p>Your new verification OTP is:</p><p style="font-size:28px;font-weight:700;letter-spacing:6px">${otp}</p><p>It expires in ${config.app.otpExpiresMinutes} minutes.</p>`});
+    return{status:200,body:{message:"A new verification OTP was sent."}};
   },
 
   async signup(name, email, password, roleId) {
-    const existing = await query("SELECT id FROM users WHERE email = $1", [email]);
-    if (existing.rowCount > 0) {
-      return { status: 409, body: { message: "Email already exists." } };
-    }
-
-    const hashed = hashPassword(password);
-    const isAdmin = roleId === 1;
-    const result = await query(
-      "INSERT INTO users (name, email, password, role_id, is_admin, email_verified) VALUES ($1, $2, $3, $4, $5, TRUE) RETURNING id, email",
-      [name, email, hashed, roleId, isAdmin]
-    );
-
-    return { status: 201, body: { user: safeJson(result.rows[0]) } };
+    return { status: 403, body: { message: "Self-signup is disabled. Ask an administrator to create your CRM account." } };
   },
 
   async forgotPassword(email) {
@@ -126,7 +124,7 @@ export const AuthService = {
   async refreshToken(refreshToken) {
     try {
       const payload = jwt.verify(refreshToken, config.app.jwtSecret);
-      const result = await query("SELECT id FROM users WHERE id = $1 AND refresh_token = $2", [payload.userId, refreshToken]);
+      const result = await query("SELECT id FROM users WHERE id = $1 AND refresh_token = $2 AND is_active AND deleted_at IS NULL", [payload.userId, refreshToken]);
       if (result.rowCount === 0) {
         return { status: 401, body: { message: "Invalid refresh token." } };
       }

@@ -11,7 +11,7 @@ export async function requiresAuth(req, res, next) {
   const token = authHeader.replace("Bearer ", "");
   try {
     const payload = verifyToken(token);
-    const result = await query("SELECT id, email, role_id, is_admin, is_active FROM users WHERE id = $1", [payload.userId]);
+    const result = await query("SELECT id, email, role_id, is_admin, is_active FROM users WHERE id = $1 AND deleted_at IS NULL", [payload.userId]);
     const user = result.rows[0];
     if (!user || !user.is_active) {
       return res.status(401).json({ message: "Invalid session." });

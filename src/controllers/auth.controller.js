@@ -39,6 +39,7 @@ export const AuthController = {
     const result = await AuthService.refreshToken(refreshToken);
     return res.status(result.status).json(result.body);
   },
+  async resendVerification(req,res){const result=await AuthService.resendVerification(req.body.email);return res.status(result.status).json(result.body);},
 
   async logout(req, res) {
     const { refreshToken, activitySessionId } = req.body;
