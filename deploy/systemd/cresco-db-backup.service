@@ -1,0 +1,10 @@
+[Unit]
+Description=Create and validate the daily Cresco CRM PostgreSQL backup
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/cresco-crm-be
+ExecStart=/usr/bin/docker compose --env-file .env.production exec -T api node scripts/database-backup.js create
+

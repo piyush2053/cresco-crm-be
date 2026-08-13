@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env ./node_modules/nodemon/bin/nodemon.js src/index.js",
     "start": "node src/index.js",
-    "check": "node --check src/index.js && node --check src/config.js && node --check scripts/initial-data-load.js",
+    "check": "node --check src/index.js && node --check src/config.js && node --check scripts/initial-data-load.js && node --check scripts/database-backup.js",
     "initial-data:template": "node --env-file-if-exists=.env scripts/initial-data-load.js template",
     "initial-data:validate": "node --env-file-if-exists=.env scripts/initial-data-load.js validate",
     "initial-data:import": "node --env-file-if-exists=.env scripts/initial-data-load.js import"

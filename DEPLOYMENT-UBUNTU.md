@@ -176,3 +176,18 @@ docker compose --env-file .env.production exec db psql -U cresco_app -d cresco_p
 ```
 
 Named volume `postgres_data` contains the database. A Docker volume is not a backup; keep the separate scheduled PostgreSQL dump process and test restores regularly.
+
+## 10. Automated backups and cache maintenance
+
+Install the supplied systemd units after deployment:
+
+```bash
+sudo cp deploy/systemd/cresco-* /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now cresco-db-backup.timer cresco-db-backup-email.timer cresco-docker-cache-clean.timer
+systemctl list-timers 'cresco-*'
+```
+
+The daily job creates a compressed PostgreSQL custom-format `.backup`, validates it with `pg_restore --list`, and only then removes older backups so exactly one validated backup remains. The weekly job emails that file to every active, verified administrator. The cache job removes only unused Docker build cache older than seven days; it does not prune containers, images, or volumes.
+
+Check job output with `journalctl -u cresco-db-backup.service`, `journalctl -u cresco-db-backup-email.service`, and `journalctl -u cresco-docker-cache-clean.service`.

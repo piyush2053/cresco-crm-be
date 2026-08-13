@@ -1,0 +1,11 @@
+[Unit]
+Description=Clean old unused Docker build cache weekly
+
+[Timer]
+OnCalendar=Sun *-*-* 03:00:00 Asia/Kolkata
+Persistent=true
+RandomizedDelaySec=15m
+Unit=cresco-docker-cache-clean.service
+
+[Install]
+WantedBy=timers.target

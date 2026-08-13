@@ -1,0 +1,10 @@
+[Unit]
+Description=Email the latest Cresco CRM database backup to verified admins
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/cresco-crm-be
+ExecStart=/usr/bin/docker compose --env-file .env.production exec -T api node scripts/database-backup.js email-latest
+

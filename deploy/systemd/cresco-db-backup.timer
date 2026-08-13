@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the Cresco CRM database backup every day
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 Asia/Kolkata
+Persistent=true
+RandomizedDelaySec=5m
+Unit=cresco-db-backup.service
+
+[Install]
+WantedBy=timers.target
+
