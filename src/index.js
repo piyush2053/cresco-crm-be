@@ -33,7 +33,7 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
-app.get("/", (req, res) => res.json({ message: "Cresco CRM API is running. V1.0" }));
+app.get("/", (req, res) => res.json({ message: "Cresco CRM API is running. V1.1" }));
 app.use("/api/auth", authRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/roles", rolesRoutes);

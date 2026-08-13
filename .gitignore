@@ -18,6 +18,18 @@ backups/
 uploads/
 *.backup
 *.dump
+
+# Spreadsheet and delimited data files
+*.csv
+*.xls
+*.xlsx
+*.xlsm
+*.xlsb
+*.xlt
+*.xltx
+*.xltm
+*.ods
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
