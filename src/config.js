@@ -43,4 +43,8 @@ export const config = {
     pass: value("SMTP_PASS"),
     from: value("SMTP_FROM", "Cresco CRM <help.cresco@gmail.com>"),
   },
+  productAssets: {
+    directory: "/app/product-assets",
+    publicUrl: "https://msl.rnj.mybluehost.me/product-assets",
+  },
 };

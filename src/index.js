@@ -15,6 +15,7 @@ import ordersRoutes from "./routes/orders.route.js";
 import financeRoutes from "./routes/finance.route.js";
 import settingsRoutes from "./routes/settings.route.js";
 import searchRoutes from "./routes/search.route.js";
+import productsRoutes, { publicProductsRouter } from "./routes/products.route.js";
 import { startSchedulers } from "./services/scheduler.service.js";
 import { config } from "./config.js";
 
@@ -32,6 +33,7 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(cookieParser());
+app.use("/product-assets", express.static(config.productAssets.directory, { fallthrough: false, index: false }));
 
 app.get("/", (req, res) => res.json({ message: "Cresco CRM API is running. V1.3" }));
 app.use("/api/auth", authRoutes);
@@ -47,6 +49,8 @@ app.use("/api/orders", ordersRoutes);
 app.use("/api/finance", financeRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/search", searchRoutes);
+app.use("/api/products", productsRoutes);
+app.use("/api/public", publicProductsRouter);
 
 app.use((err, req, res, next) => {
   console.error(err);
