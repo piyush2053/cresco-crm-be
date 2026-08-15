@@ -49,12 +49,12 @@ function publicRow(row) {
     id: row.legacy_id ?? row.id, company: row.company, country: row.country, method: row.method,
     grade: row.grade, application: row.application, description: row.description,
     datasheet: publicAsset(row.datasheet_path), sample: publicAsset(row.sample_path),
-    slug: row.slug, category: row.category,
+    image: publicAsset(row.image_path), slug: row.slug, category: row.category,
   };
 }
 
 function crmRow(row) {
-  return row ? { ...row, datasheet_url: publicAsset(row.datasheet_path), sample_url: publicAsset(row.sample_path) } : null;
+  return row ? { ...row, datasheet_url: publicAsset(row.datasheet_path), sample_url: publicAsset(row.sample_path), image_url: publicAsset(row.image_path) } : null;
 }
 
 function safeAssetPath(relative) {
@@ -68,7 +68,7 @@ function safeAssetPath(relative) {
 async function removeIfUnreferenced(relative) {
   const target = safeAssetPath(relative);
   if (!target) return;
-  const used = await query("SELECT 1 FROM website_products WHERE datasheet_path=$1 OR sample_path=$1 LIMIT 1", [relative]);
+  const used = await query("SELECT 1 FROM website_products WHERE datasheet_path=$1 OR sample_path=$1 OR image_path=$1 LIMIT 1", [relative]);
   if (!used.rowCount) await rm(target, { force: true });
 }
 
@@ -106,12 +106,17 @@ export const ProductsService = {
     if (!row) return null;
     await removeIfUnreferenced(row.datasheet_path);
     if (row.sample_path !== row.datasheet_path) await removeIfUnreferenced(row.sample_path);
+    await removeIfUnreferenced(row.image_path);
     return crmRow(row);
   },
   async attachDatasheet(id, relativePath, userId) {
     await mkdir(path.dirname(safeAssetPath(relativePath)), { recursive: true });
     const row = (await query("UPDATE website_products SET datasheet_path=$1,sample_path=CASE WHEN sample_path IS NULL OR sample_path=datasheet_path THEN $1 ELSE sample_path END,updated_by=$2 WHERE id=$3 RETURNING *", [relativePath,userId,id])).rows[0];
     if (!row) return null;
+    return crmRow(row);
+  },
+  async attachImage(id, relativePath, userId) {
+    const row = (await query("UPDATE website_products SET image_path=$1,updated_by=$2 WHERE id=$3 RETURNING *", [relativePath,userId,id])).rows[0];
     return crmRow(row);
   },
   removeIfUnreferenced,

@@ -19,7 +19,7 @@ export const config = {
     port: numberValue("PORT", 4000),
     apiUrl: value("API_URL", "http://localhost:4000"),
     frontendUrl: value("FRONTEND_URL", "http://localhost:5173"),
-    corsOrigins: value("CORS_ORIGINS", "http://localhost:5173")
+    corsOrigins: value("CORS_ORIGINS", "http://localhost:5173, http://localhost:5174",)
       .split(",")
       .map((origin) => origin.trim())
       .filter(Boolean),

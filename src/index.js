@@ -63,6 +63,7 @@ app.use((err, req, res, next) => {
     "22P02":[400,"One or more values have an invalid format."],
     "22007":[400,"The supplied date or time is invalid."],
     "22008":[400,"The supplied date or time is outside the valid range."]
+    ,"LIMIT_FILE_SIZE":[400,"Uploaded file exceeds the allowed size."]
   };
   const mapped=known[err.code];
   const validation=!err.code&&/invalid|required|unknown|unsupported|select|no worksheet/i.test(err.message||"");

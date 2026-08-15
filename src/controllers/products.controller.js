@@ -19,5 +19,16 @@ export const ProductsController = {
       return res.json(row);
     }catch(error){await rm(req.file.path,{force:true});throw error;}
   },
+  async uploadImage(req,res){
+    if(!req.file)return res.status(400).json({message:"Please select a product image."});
+    const relative=`images/${req.file.filename}`;
+    try{
+      const previous=await ProductsService.get(id(req));
+      if(!previous){await rm(req.file.path,{force:true});return res.status(404).json({message:"Website product not found."});}
+      const row=await ProductsService.attachImage(id(req),relative,req.user.id);
+      if(previous.image_path&&previous.image_path!==relative)await ProductsService.removeIfUnreferenced(previous.image_path);
+      return res.json(row);
+    }catch(error){await rm(req.file.path,{force:true});throw error;}
+  },
   async publicList(req,res){res.json(await ProductsService.publicList());},
 };

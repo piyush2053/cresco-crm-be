@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE website_products
+ADD COLUMN IF NOT EXISTS image_path TEXT;
+
+COMMIT;
