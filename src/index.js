@@ -35,7 +35,7 @@ app.use(express.json());
 app.use(cookieParser());
 app.use("/product-assets", express.static(config.productAssets.directory, { fallthrough: false, index: false }));
 
-app.get("/", (req, res) => res.json({ message: "Cresco CRM API is running. V1.3" }));
+app.get("/", (req, res) => res.json({ message: "Cresco CRM API is running. V1.4" }));
 app.use("/api/auth", authRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/roles", rolesRoutes);
