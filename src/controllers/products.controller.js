@@ -9,7 +9,7 @@ export const ProductsController = {
   async update(req,res){const row=await ProductsService.update(id(req),req.body,req.user.id);return row?res.json(row):res.status(404).json({message:"Website product not found."});},
   async remove(req,res){const row=await ProductsService.remove(id(req));return row?res.json({message:"Website product deleted."}):res.status(404).json({message:"Website product not found."});},
   async uploadDatasheet(req,res){
-    if(!req.file)return res.status(400).json({message:"Please select a PDF datasheet."});
+    if(!req.file)return res.status(400).json({message:"Please select a PDF, XLSX or CSV datasheet."});
     const relative=`datasheets/${req.file.filename}`;
     try{
       const previous=await ProductsService.get(id(req));

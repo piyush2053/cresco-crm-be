@@ -10,11 +10,16 @@ import { requiresAuth, requiresPermission } from "../middlewares.js";
 const destination=path.join(config.productAssets.directory,"datasheets");
 mkdirSync(destination,{recursive:true});
 const upload=multer({
-  storage:multer.diskStorage({destination,filename:(req,file,done)=>done(null,`${Date.now()}-${crypto.randomUUID()}.pdf`)}),
-  limits:{fileSize:15*1024*1024},
+  storage:multer.diskStorage({destination,filename:(req,file,done)=>done(null,`${Date.now()}-${crypto.randomUUID()}${path.extname(file.originalname).toLowerCase()}`)}),
+  limits:{fileSize:10*1024*1024},
   fileFilter:(req,file,done)=>{
-    const validMime=file.mimetype==="application/pdf",validExtension=path.extname(file.originalname).toLowerCase()===".pdf";
-    return validMime&&validExtension?done(null,true):done(Object.assign(new Error("Only PDF datasheets are allowed."),{status:400}));
+    const extension=path.extname(file.originalname).toLowerCase();
+    const allowed=new Map([
+      [".pdf",new Set(["application/pdf"])],
+      [".xlsx",new Set(["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"])],
+      [".csv",new Set(["text/csv","application/csv","application/vnd.ms-excel","text/plain"])],
+    ]);
+    return allowed.get(extension)?.has(file.mimetype)?done(null,true):done(Object.assign(new Error("Only PDF, XLSX or CSV datasheets are allowed."),{status:400}));
   },
 });
 const imageDestination=path.join(config.productAssets.directory,"images");
