@@ -1,6 +1,7 @@
 import { query, getClient } from "../db.js";
 import { safeJson } from "../utils.js";
 import ExcelJS from "exceljs";
+import { ensureCoreBuyerDropdowns } from "./dropdown-defaults.js";
 
 const BUYER_FIELDS = ["group_name", "pan", "gst_slab", "state", "group_tag", "reference", "parent_location", "remark", "lead_manager", "lead_type", "monthly_consumption", "call_date", "next_call_date", "call_remark", "profile_shared", "quote_shared", "order_status", "credit_interest"];
 const CONTACT_FIELDS = ["name", "department", "designation", "mobile_number", "email_address", "whatsapp_number", "notes", "is_primary"];
@@ -117,7 +118,14 @@ export const BuyersService = {
     for (const id of ids) await query("INSERT INTO buyer_master_links (buyer_id,master_value_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [buyerId, id]);
   },
   async remove(id) { await query("DELETE FROM buyers WHERE id=$1", [id]); return { message: "Buyer removed." }; },
-  async masters() { return (await query("SELECT * FROM buyer_master_values WHERE is_active ORDER BY master_type,label")).rows.map(safeJson); },
+  async masters() {
+    await ensureCoreBuyerDropdowns();
+    const [values,users]=await Promise.all([
+      query("SELECT * FROM buyer_master_values WHERE is_active ORDER BY master_type,label"),
+      query("SELECT id,name,email FROM users WHERE is_active AND deleted_at IS NULL ORDER BY name")
+    ]);
+    return safeJson({values:values.rows,users:users.rows});
+  },
   async uploadTemplate(){const wb=new ExcelJS.Workbook(),sheet=wb.addWorksheet("Buyer GST Upload");sheet.addRow(UPLOAD_HEADERS);sheet.getRow(1).font={bold:true};sheet.views=[{state:"frozen",ySplit:1}];sheet.columns=UPLOAD_HEADERS.map(h=>({header:h,key:h,width:Math.min(Math.max(h.length+2,16),42)}));return wb.xlsx.writeBuffer()},
   async analyzeUpload(filename,buffer){
     if(!/\.xlsx$/i.test(filename))throw Object.assign(new Error("Only .xlsx Buyer files are supported."),{status:400});
