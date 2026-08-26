@@ -93,6 +93,13 @@ export const BuyersService = {
       await query(`UPDATE buyers SET ${fields.map((f, i) => `${f}=$${i + 1}`).join(",")},updated_at=now() WHERE id=$${values.length}`, values);
     }
     if (payload.interest_ids) await this.setInterests(id, payload.interest_ids);
+    const hasPrimaryContact = ["primary_contact_name", "primary_contact_number", "primary_contact_designation"].some((key) => payload[key] !== undefined);
+    if (hasPrimaryContact) {
+      const contactPayload = { name: payload.primary_contact_name, mobile_number: payload.primary_contact_number, designation: payload.primary_contact_designation, is_primary: true };
+      const primary = (await query("SELECT id FROM buyer_contacts WHERE buyer_id=$1 AND is_primary ORDER BY id LIMIT 1", [id])).rows[0];
+      if (primary) await this.updateContact(id, primary.id, contactPayload);
+      else await this.addContact(id, contactPayload);
+    }
     if (payload.custom_fields && typeof payload.custom_fields === "object") for (const [fieldKey,value] of Object.entries(payload.custom_fields)) await query(`INSERT INTO buyer_custom_field_values(buyer_id,definition_id,value)SELECT $1,id,$3 FROM buyer_custom_field_definitions WHERE field_key=$2 AND is_active ON CONFLICT(buyer_id,definition_id)DO UPDATE SET value=EXCLUDED.value`,[id,fieldKey,value]);
     await query("INSERT INTO buyer_activities (buyer_id,activity_type,description,created_by) VALUES ($1,'buyer_updated','Buyer profile updated',$2)", [id, userId]);
     return this.get(id);
