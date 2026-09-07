@@ -17,6 +17,17 @@ VALUES
   ('gst_slab','500 Cr and above','TURNOVER_500_CR_PLUS',TRUE)
 ON CONFLICT(master_type,label) DO UPDATE SET is_active=TRUE,code=EXCLUDED.code;
 
+-- Configurable Buyer Group priority/category tags.
+INSERT INTO buyer_master_values(master_type,label,code,is_active)
+VALUES
+  ('group_tag','Important Buyer','IMPORTANT_BUYER',TRUE),
+  ('group_tag','Medium Priority','MEDIUM_PRIORITY',TRUE),
+  ('group_tag','Standard Buyer','STANDARD_BUYER',TRUE),
+  ('group_tag','Low Priority','LOW_PRIORITY',TRUE),
+  ('group_tag','Strategic Account','STRATEGIC_ACCOUNT',TRUE),
+  ('group_tag','Key Account','KEY_ACCOUNT',TRUE)
+ON CONFLICT(master_type,label) DO UPDATE SET is_active=TRUE,code=EXCLUDED.code;
+
 -- Reject invalid new/updated PAN and GSTIN values at the database boundary.
 ALTER TABLE buyers DROP CONSTRAINT IF EXISTS buyers_pan_format_check;
 ALTER TABLE buyers ADD CONSTRAINT buyers_pan_format_check

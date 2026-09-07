@@ -9,6 +9,7 @@ export const INDIA_STATES_AND_UTS = [
 ];
 
 export const GST_SLABS = ["0-40 Lakh", "40 Lakh-1.5 Cr", "1.5-5 Cr", "5-25 Cr", "25-100 Cr", "100-500 Cr", "500 Cr and above"];
+export const BUYER_GROUP_TAGS = ["Important Buyer", "Medium Priority", "Standard Buyer", "Low Priority", "Strategic Account", "Key Account"];
 
 let setupPromise;
 export function ensureCoreBuyerDropdowns() {
@@ -23,6 +24,9 @@ export function ensureCoreBuyerDropdowns() {
   await query(`INSERT INTO buyer_master_values(master_type,label,code)
     SELECT 'gst_slab',value,regexp_replace(value,'[^0-9]+','_','g') FROM unnest($1::text[]) value
     ON CONFLICT(master_type,label) DO NOTHING`, [GST_SLABS]);
+  await query(`INSERT INTO buyer_master_values(master_type,label,code)
+    SELECT 'group_tag',value,upper(regexp_replace(value,'[^a-zA-Z0-9]+','_','g')) FROM unnest($1::text[]) value
+    ON CONFLICT(master_type,label) DO NOTHING`, [BUYER_GROUP_TAGS]);
   })().catch(error => { setupPromise = null; throw error; });
   return setupPromise;
 }

@@ -34,7 +34,7 @@ export const SettingsService = {
     const sales=(await query("SELECT master_type,count(*)::int record_count FROM sales_master_values GROUP BY master_type ORDER BY master_type")).rows;
     const buyer=(await query("SELECT master_type,count(*)::int record_count FROM buyer_master_values GROUP BY master_type ORDER BY master_type")).rows;
     const labels={inquiry_type:"Inquiry Types",inquiry_source:"Inquiry Sources",sales_stage:"Sales / Order Pipeline Stages",additional_charge:"Additional Charge Types"};
-    const buyerLabels={state:"States",gst_slab:"GST Slabs",lead_type:"Lead Sources",lead_types:"Lead Sources"};
+    const buyerLabels={state:"States",gst_slab:"GST Slabs",group_tag:"Buyer Group Tags",lead_type:"Lead Sources",lead_types:"Lead Sources"};
     return [...sales.map(x=>({source:"sales",type:x.master_type,name:labels[x.master_type]||x.master_type.replaceAll("_"," "),record_count:x.record_count})),...buyer.map(x=>({source:"buyer",type:x.master_type,name:buyerLabels[x.master_type]||`Buyer - ${x.master_type.replaceAll("_"," ")}`,record_count:x.record_count}))];
   },
   async dropdownValues(source,type){const config=dropdownSources[source];if(!config||config.types&&!config.types.includes(type))throw new Error("Unknown dropdown group.");const order=config.sortable?"sort_order,label":"label";return list(`SELECT id,label,${config.sortable?"sort_order":"0 sort_order"},is_active FROM ${config.table} WHERE master_type=$1 ORDER BY ${order}`,[type])},
