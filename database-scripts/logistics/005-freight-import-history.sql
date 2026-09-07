@@ -1,0 +1,10 @@
+BEGIN;
+CREATE TABLE IF NOT EXISTS logistics_freight_imports(
+ id BIGSERIAL PRIMARY KEY,filename TEXT NOT NULL,file_type TEXT NOT NULL,status TEXT NOT NULL,
+ total_rows INTEGER NOT NULL DEFAULT 0,valid_rows INTEGER NOT NULL DEFAULT 0,invalid_rows INTEGER NOT NULL DEFAULT 0,
+ inserted_rows INTEGER NOT NULL DEFAULT 0,updated_rows INTEGER NOT NULL DEFAULT 0,duplicate_rows INTEGER NOT NULL DEFAULT 0,
+ error_summary JSONB NOT NULL DEFAULT '[]',uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+ created_at TIMESTAMPTZ DEFAULT now(),completed_at TIMESTAMPTZ
+);
+ALTER TABLE logistics_base_freight ADD COLUMN IF NOT EXISTS import_id BIGINT REFERENCES logistics_freight_imports(id) ON DELETE SET NULL;
+COMMIT;
