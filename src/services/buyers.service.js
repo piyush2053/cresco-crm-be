@@ -87,6 +87,7 @@ export const BuyersService = {
   },
 
   async update(id, payload, userId) {
+    const previous = (await query("SELECT call_date,next_call_date,call_remark FROM buyers WHERE id=$1", [id])).rows[0];
     const fields = BUYER_FIELDS.filter((f) => payload[f] !== undefined);
     if (fields.length) {
       const values = fields.map((f) => payload[f]); values.push(id);
@@ -102,6 +103,7 @@ export const BuyersService = {
     }
     if (payload.custom_fields && typeof payload.custom_fields === "object") for (const [fieldKey,value] of Object.entries(payload.custom_fields)) await query(`INSERT INTO buyer_custom_field_values(buyer_id,definition_id,value)SELECT $1,id,$3 FROM buyer_custom_field_definitions WHERE field_key=$2 AND is_active ON CONFLICT(buyer_id,definition_id)DO UPDATE SET value=EXCLUDED.value`,[id,fieldKey,value]);
     await query("INSERT INTO buyer_activities (buyer_id,activity_type,description,created_by) VALUES ($1,'buyer_updated','Buyer profile updated',$2)", [id, userId]);
+    if (payload.call_remark !== undefined && clean(payload.call_remark) && (clean(payload.call_remark) !== clean(previous?.call_remark) || String(payload.call_date||"") !== String(previous?.call_date||"") || String(payload.next_call_date||"") !== String(previous?.next_call_date||""))) await query("INSERT INTO buyer_activities (buyer_id,activity_type,description,metadata,created_by) VALUES ($1,'call_remark',$2,$3,$4)", [id, clean(payload.call_remark), { call_date: payload.call_date||previous?.call_date||null, next_call_date: payload.next_call_date||previous?.next_call_date||null }, userId]);
     return this.get(id);
   },
 

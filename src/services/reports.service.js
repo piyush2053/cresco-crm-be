@@ -15,7 +15,7 @@ export const ReportsService = {
     return ActivityService.daily(month, userId, startDate, endDate);
   },
   async dashboard() {
-    const [buyers, suppliers, orders, logistics, finance, recentOrders, deliveries, expiringPrices] = await Promise.all([
+    const [buyers, suppliers, orders, logistics, finance, recentOrders, deliveries, expiringPrices, prospectsToday, followUpsToday] = await Promise.all([
       query("SELECT count(*) total,count(*) FILTER(WHERE order_count>0) customers FROM buyers"),
       query("SELECT count(*) total FROM suppliers WHERE is_active"),
       query("SELECT count(*) total,COALESCE(sum(total_order_value),0) value,count(*) FILTER(WHERE status NOT IN ('Completed','Cancelled')) active FROM orders WHERE deleted_at IS NULL"),
@@ -23,14 +23,17 @@ export const ReportsService = {
       query("SELECT COALESCE(sum(outstanding),0) outstanding,count(*) FILTER(WHERE outstanding>0 AND due_date<CURRENT_DATE) overdue FROM finance_receivables_view"),
       query("SELECT o.id,o.order_number,o.product_category,o.grade,o.quantity_kg,o.status,o.order_date,b.group_name buyer_name FROM orders o JOIN buyers b ON b.id=o.buyer_id WHERE o.deleted_at IS NULL ORDER BY o.created_at DESC LIMIT 8"),
       query("SELECT count(*) due FROM orders WHERE deleted_at IS NULL AND status NOT IN ('Completed','Cancelled') AND expected_delivery_date<=CURRENT_DATE+7"),
-      query("SELECT count(*) expiring FROM supplier_grade_prices WHERE is_active AND expires_at BETWEEN now() AND now()+interval '12 hours'")
+      query("SELECT count(*) expiring FROM supplier_grade_prices WHERE is_active AND expires_at BETWEEN now() AND now()+interval '12 hours'"),
+      query(`SELECT b.id,b.group_name,c.name primary_contact_name,c.mobile_number primary_contact_number,b.monthly_consumption,b.lead_manager,b.next_call_date FROM buyers b LEFT JOIN buyer_contacts c ON c.buyer_id=b.id AND c.is_primary WHERE COALESCE(b.order_count,0)=0 AND COALESCE(b.order_status,'Prospect')='Prospect' AND (b.next_call_date IS NULL OR b.next_call_date<=CURRENT_DATE) ORDER BY b.next_call_date NULLS FIRST,b.group_name LIMIT 50`),
+      query(`SELECT b.id,b.group_name,c.name primary_contact_name,c.mobile_number primary_contact_number,b.call_date,b.next_call_date,b.call_remark,b.lead_manager FROM buyers b LEFT JOIN buyer_contacts c ON c.buyer_id=b.id AND c.is_primary WHERE b.next_call_date<=CURRENT_DATE ORDER BY b.next_call_date,b.group_name LIMIT 50`)
     ]);
     return {
       totalBuyers:+buyers.rows[0].total, customers:+buyers.rows[0].customers,
       totalSuppliers:+suppliers.rows[0].total,totalOrders:+orders.rows[0].total,activeOrders:+orders.rows[0].active,
       orderValue:+orders.rows[0].value,logisticsShipments:+logistics.rows[0].shipments,logisticsSpend:+logistics.rows[0].spend,
       financeOutstanding:+finance.rows[0].outstanding,overduePayments:+finance.rows[0].overdue,
-      deliveriesDue:+deliveries.rows[0].due,pricesExpiring:+expiringPrices.rows[0].expiring,recentOrders:recentOrders.rows
+      deliveriesDue:+deliveries.rows[0].due,pricesExpiring:+expiringPrices.rows[0].expiring,recentOrders:recentOrders.rows,
+      prospectsToday:prospectsToday.rows,followUpsToday:followUpsToday.rows
     };
   },
 
