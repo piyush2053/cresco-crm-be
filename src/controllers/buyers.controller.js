@@ -1,5 +1,5 @@
 import { BuyersService } from "../services/buyers.service.js";
-const fail = (res, error) => error.code === "23505" ? res.status(409).json({ message: "PAN must be unique for each Buyer Group." }) : Promise.reject(error);
+const fail = (res, error) => error.code === "23505" ? res.status(409).json({ message: String(error.constraint||error.detail||"").toLowerCase().includes("gst") ? "GSTIN already belongs to another Buyer Location." : "PAN must be unique for each Buyer Group." }) : Promise.reject(error);
 export const BuyersController = {
   async list(req,res){ return res.json(await BuyersService.list(req.query)); },
   async get(req,res){ const row=await BuyersService.get(Number(req.params.id)); return row ? res.json(row) : res.status(404).json({message:"Buyer not found."}); },

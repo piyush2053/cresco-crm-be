@@ -3,7 +3,7 @@ import { safeJson } from "../utils.js";
 import ExcelJS from "exceljs";
 import { ensureCoreBuyerDropdowns } from "./dropdown-defaults.js";
 
-const BUYER_FIELDS = ["group_name", "pan", "gst_slab", "state", "group_tag", "reference", "parent_location", "remark", "lead_manager", "lead_type", "monthly_consumption", "call_date", "next_call_date", "call_remark", "profile_shared", "quote_shared", "order_status", "credit_interest"];
+const BUYER_FIELDS = ["group_name", "pan", "gst_slab", "state", "group_tag", "reference", "parent_location", "remark", "lead_manager", "lead_type", "monthly_consumption", "call_date", "next_call_date", "call_remark", "profile_shared", "quote_shared", "order_status", "payment_terms"];
 const CONTACT_FIELDS = ["name", "department", "designation", "mobile_number", "email_address", "whatsapp_number", "notes", "is_primary"];
 const LOCATION_FIELDS = ["name", "gst_number", "pan", "address", "pincode", "city", "state", "delivery_preferences", "credit_terms"];
 const UPLOAD_HEADERS=["PAN","PAN to GST Status","GST","status","errdata","BUSINESS TYPE","data_basicDetails_aadharVerified","data_basicDetails_Legal_Name","data_basicDetails_gstin","data_basicDetails_Ekyc_Flag","data_basicDetails_compositionRate","BUSINESS CONSTITUTION","data_basicDetails_tradeNam","data_basicDetails_aadharVerDate","data_basicDetails_ctj","data_basicDetails_percentTaxInCash","data_basicDetails_mandatedeInvoice","data_basicDetails_aggreTurnOverFY","data_basicDetails_jurisdiction","data_basicDetails_registrationType","data_basicDetails_aggreTurnOver","data_basicDetails_cancelationDate","data_basicDetails_businessNature","data_basicDetails_registrationDate","data_basicDetails_registrationStatus","data_basicDetails_ekycVdt","data_basicDetails_percentTaxInCashFY","data_basicDetails_einvoiceStatus","data_basicDetails_memberDetails","data_basicDetails_mobile","data_basicDetails_email","data_hsnDetails_goods","data_branchDetails_permanentAdd_address","data_branchDetails_permanentAdd_dealsIn","data_branchDetails_additionalAdd"];
@@ -67,27 +67,38 @@ export const BuyersService = {
       query("SELECT l.*,COALESCE(json_agg(json_build_object('contact_id',cl.contact_id,'phone_number',cl.phone_number,'email_address',cl.email_address)) FILTER (WHERE cl.contact_id IS NOT NULL),'[]') contacts FROM buyer_locations l LEFT JOIN buyer_contact_locations cl ON cl.location_id=l.id WHERE l.buyer_id=$1 GROUP BY l.id ORDER BY l.created_at", [id]),
       query("SELECT mv.* FROM buyer_master_links l JOIN buyer_master_values mv ON mv.id=l.master_value_id WHERE l.buyer_id=$1 ORDER BY mv.master_type,mv.label", [id]),
       query("SELECT d.id,d.field_key,d.label,d.field_type,d.options,d.is_required,v.value FROM buyer_custom_field_definitions d LEFT JOIN buyer_custom_field_values v ON v.definition_id=d.id AND v.buyer_id=$1 WHERE d.is_active ORDER BY d.sort_order,d.id", [id]),
-      query("SELECT * FROM buyer_activities WHERE buyer_id=$1 ORDER BY occurred_at DESC LIMIT 100", [id]),
+      query("SELECT a.*,u.name created_by_name FROM buyer_activities a LEFT JOIN users u ON u.id=a.created_by WHERE a.buyer_id=$1 ORDER BY a.occurred_at DESC LIMIT 100", [id]),
       query("SELECT id,inquiry_number,inquiry_date,current_stage,status,(SELECT COALESCE(sum(quantity_kg*COALESCE(quoted_price,final_quotation_price)),0) FROM sales_transaction_products WHERE transaction_id=t.id) current_quote FROM sales_transactions t WHERE buyer_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC",[id]),
     ]);
     return safeJson({ ...buyer, contacts: contacts.rows, locations: locations.rows, interests: interests.rows, custom_fields: customFields.rows, activities: activities.rows, transactions: transactions.rows });
   },
 
   async create(payload, userId) {
-    try {
+    payload.pan=clean(payload.pan).toUpperCase();payload.gst_number=clean(payload.gst_number).toUpperCase();
+    if(!clean(payload.group_name))throw Object.assign(new Error("Buyer group name cannot be blank."),{status:400});
+    if(!PAN_RE.test(payload.pan))throw Object.assign(new Error("Invalid input: PAN must follow AAAAA9999A format."),{status:400});
+    if(!GST_RE.test(payload.gst_number))throw Object.assign(new Error("Invalid input: GSTIN must contain 15 characters in valid format."),{status:400});
+    if(payload.gst_number.slice(2,12)!==payload.pan)throw Object.assign(new Error("Invalid input: GSTIN PAN must match the Buyer Group PAN."),{status:400});
+    if(payload.location_address&&!/^\d{6}$/.test(clean(payload.location_pincode)))throw Object.assign(new Error("Invalid input: location pincode must contain 6 digits."),{status:400});
+    const client=await getClient();
+    try {await client.query("BEGIN");
       const columns = BUYER_FIELDS.filter((f) => payload[f] !== undefined);
       const values = columns.map((f) => payload[f]);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(",");
-      const buyer = (await query(`INSERT INTO buyers (${columns.join(",")}) VALUES (${placeholders}) RETURNING *`, values)).rows[0];
-      if (payload.primary_contact_name || payload.primary_contact_number) await this.addContact(buyer.id, { name: payload.primary_contact_name, mobile_number: payload.primary_contact_number, designation: payload.primary_contact_designation, is_primary: true });
-      await this.setInterests(buyer.id, payload.interest_ids || []);
-      await query("INSERT INTO buyer_activities (buyer_id,activity_type,description,created_by) VALUES ($1,'buyer_created','Buyer group created',$2)", [buyer.id, userId]);
-      return this.get(buyer.id);
-    } catch (error) { throw error; }
+      const buyer = (await client.query(`INSERT INTO buyers (${columns.join(",")}) VALUES (${placeholders}) RETURNING *`, values)).rows[0];
+      await client.query("INSERT INTO buyer_locations(buyer_id,name,gst_number,pan,address,pincode,city,state)VALUES($1,$2,$3,$4,$5,$6,$7,$8)",[buyer.id,clean(payload.location_name)||payload.group_name,payload.gst_number,payload.pan,clean(payload.location_address)||null,clean(payload.location_pincode)||null,clean(payload.location_city)||null,payload.state||null]);
+      if(payload.primary_contact_name||payload.primary_contact_number)await client.query("INSERT INTO buyer_contacts(buyer_id,name,mobile_number,designation,is_primary)VALUES($1,$2,$3,$4,true)",[buyer.id,clean(payload.primary_contact_name)||"Primary Contact",clean(payload.primary_contact_number)||null,payload.primary_contact_designation||null]);
+      for(const interestId of payload.interest_ids||[])await client.query("INSERT INTO buyer_master_links(buyer_id,master_value_id)VALUES($1,$2)ON CONFLICT DO NOTHING",[buyer.id,interestId]);
+      await client.query("INSERT INTO buyer_activities (buyer_id,activity_type,description,created_by) VALUES ($1,'buyer_created','Buyer group created',$2)", [buyer.id, userId]);
+      if(clean(payload.remark))await client.query("INSERT INTO buyer_activities(buyer_id,activity_type,description,created_by)VALUES($1,'remark',$2,$3)",[buyer.id,clean(payload.remark),userId]);
+      if(clean(payload.call_remark))await client.query("INSERT INTO buyer_activities(buyer_id,activity_type,description,metadata,created_by)VALUES($1,'call_remark',$2,$3,$4)",[buyer.id,clean(payload.call_remark),{call_date:payload.call_date||null,next_call_date:payload.next_call_date||null},userId]);
+      await client.query("COMMIT");return this.get(buyer.id);
+    } catch (error) {await client.query("ROLLBACK");throw error;}finally{client.release()}
   },
 
   async update(id, payload, userId) {
-    const previous = (await query("SELECT call_date,next_call_date,call_remark FROM buyers WHERE id=$1", [id])).rows[0];
+    if(payload.pan!==undefined){payload.pan=clean(payload.pan).toUpperCase();if(!PAN_RE.test(payload.pan))throw Object.assign(new Error("Invalid input: PAN must follow AAAAA9999A format."),{status:400})}
+    const previous = (await query("SELECT call_date,next_call_date,call_remark,remark FROM buyers WHERE id=$1", [id])).rows[0];
     const fields = BUYER_FIELDS.filter((f) => payload[f] !== undefined);
     if (fields.length) {
       const values = fields.map((f) => payload[f]); values.push(id);
@@ -103,6 +114,7 @@ export const BuyersService = {
     }
     if (payload.custom_fields && typeof payload.custom_fields === "object") for (const [fieldKey,value] of Object.entries(payload.custom_fields)) await query(`INSERT INTO buyer_custom_field_values(buyer_id,definition_id,value)SELECT $1,id,$3 FROM buyer_custom_field_definitions WHERE field_key=$2 AND is_active ON CONFLICT(buyer_id,definition_id)DO UPDATE SET value=EXCLUDED.value`,[id,fieldKey,value]);
     await query("INSERT INTO buyer_activities (buyer_id,activity_type,description,created_by) VALUES ($1,'buyer_updated','Buyer profile updated',$2)", [id, userId]);
+    if(payload.remark!==undefined&&clean(payload.remark)&&clean(payload.remark)!==clean(previous?.remark))await query("INSERT INTO buyer_activities(buyer_id,activity_type,description,created_by)VALUES($1,'remark',$2,$3)",[id,clean(payload.remark),userId]);
     if (payload.call_remark !== undefined && clean(payload.call_remark) && (clean(payload.call_remark) !== clean(previous?.call_remark) || String(payload.call_date||"") !== String(previous?.call_date||"") || String(payload.next_call_date||"") !== String(previous?.next_call_date||""))) await query("INSERT INTO buyer_activities (buyer_id,activity_type,description,metadata,created_by) VALUES ($1,'call_remark',$2,$3,$4)", [id, clean(payload.call_remark), { call_date: payload.call_date||previous?.call_date||null, next_call_date: payload.next_call_date||previous?.next_call_date||null }, userId]);
     return this.get(id);
   },

@@ -8,7 +8,7 @@ export const INDIA_STATES_AND_UTS = [
   "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"
 ];
 
-export const GST_SLABS = ["Nil (0%)", "0.25%", "3%", "5%", "12%", "18%", "28%"];
+export const GST_SLABS = ["0-40 Lakh", "40 Lakh-1.5 Cr", "1.5-5 Cr", "5-25 Cr", "25-100 Cr", "100-500 Cr", "500 Cr and above"];
 
 let setupPromise;
 export function ensureCoreBuyerDropdowns() {
