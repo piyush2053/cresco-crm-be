@@ -1,0 +1,8 @@
+import { query } from "../db.js";
+const bad=message=>{throw Object.assign(new Error(message),{status:400})};
+export const LogisticsMasterService={
+ async pincode(value){const p=String(value??"").trim();if(!/^\d{6}$/.test(p))bad("Invalid input: pincode must contain 6 digits.");const [districts,warehouses]=await Promise.all([query("SELECT d.id,d.name district,d.state,d.state_code FROM logistics_district_pincodes p JOIN logistics_districts d ON d.id=p.district_id WHERE p.pincode=$1 AND p.is_active AND d.is_active ORDER BY d.name",[p]),query("SELECT w.id,w.warehouse_name,w.warehouse_code,w.address,w.district,w.pincode,s.id supplier_id,s.group_name supplier_name FROM supplier_warehouses w JOIN suppliers s ON s.id=w.supplier_id WHERE w.pincode=$1 AND s.is_active ORDER BY s.group_name,w.warehouse_name",[p])]);const names=[...new Set([...districts.rows.map(x=>x.district),...warehouses.rows.map(x=>x.district).filter(Boolean)])];return{pincode:p,district:names.length===1?names[0]:null,districts:districts.rows,warehouses:warehouses.rows}},
+ async notes(){return(await query("SELECT * FROM logistics_lane_note_options WHERE is_active ORDER BY sort_order,label")).rows},
+ async saveNote(p){const label=String(p.label??"").trim();if(!label)bad("Lane note cannot be blank.");return(await query("INSERT INTO logistics_lane_note_options(label,sort_order)VALUES($1,$2)ON CONFLICT(label)DO UPDATE SET is_active=true,sort_order=EXCLUDED.sort_order RETURNING *",[label,+p.sort_order||0])).rows[0]},
+ async removeNote(id){const row=(await query("UPDATE logistics_lane_note_options SET is_active=false WHERE id=$1 RETURNING id",[id])).rows[0];if(!row)throw Object.assign(new Error("Lane note not found."),{status:404});return{message:"Lane note removed."}}
+};

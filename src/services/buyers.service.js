@@ -5,7 +5,7 @@ import { ensureCoreBuyerDropdowns } from "./dropdown-defaults.js";
 
 const BUYER_FIELDS = ["group_name", "pan", "gst_slab", "state", "group_tag", "reference", "parent_location", "remark", "lead_manager", "lead_type", "monthly_consumption", "call_date", "next_call_date", "call_remark", "profile_shared", "quote_shared", "order_status", "credit_interest"];
 const CONTACT_FIELDS = ["name", "department", "designation", "mobile_number", "email_address", "whatsapp_number", "notes", "is_primary"];
-const LOCATION_FIELDS = ["name", "gst_number", "pan", "address", "city", "state", "delivery_preferences", "credit_terms"];
+const LOCATION_FIELDS = ["name", "gst_number", "pan", "address", "pincode", "city", "state", "delivery_preferences", "credit_terms"];
 const UPLOAD_HEADERS=["PAN","PAN to GST Status","GST","status","errdata","BUSINESS TYPE","data_basicDetails_aadharVerified","data_basicDetails_Legal_Name","data_basicDetails_gstin","data_basicDetails_Ekyc_Flag","data_basicDetails_compositionRate","BUSINESS CONSTITUTION","data_basicDetails_tradeNam","data_basicDetails_aadharVerDate","data_basicDetails_ctj","data_basicDetails_percentTaxInCash","data_basicDetails_mandatedeInvoice","data_basicDetails_aggreTurnOverFY","data_basicDetails_jurisdiction","data_basicDetails_registrationType","data_basicDetails_aggreTurnOver","data_basicDetails_cancelationDate","data_basicDetails_businessNature","data_basicDetails_registrationDate","data_basicDetails_registrationStatus","data_basicDetails_ekycVdt","data_basicDetails_percentTaxInCashFY","data_basicDetails_einvoiceStatus","data_basicDetails_memberDetails","data_basicDetails_mobile","data_basicDetails_email","data_hsnDetails_goods","data_branchDetails_permanentAdd_address","data_branchDetails_permanentAdd_dealsIn","data_branchDetails_additionalAdd"];
 const PAN_RE=/^[A-Z]{5}[0-9]{4}[A-Z]$/, GST_RE=/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/;
 const clean=v=>v===null||v===undefined?"":String(v).trim();
@@ -119,6 +119,10 @@ export const BuyersService = {
     return safeJson((await query(`UPDATE buyer_contacts SET ${fields.map((f, i) => `${f}=$${i + 1}`).join(",")} WHERE buyer_id=$${values.length - 1} AND id=$${values.length} RETURNING *`, values)).rows[0]);
   },
   async addLocation(buyerId, payload) {
+    if(!String(payload.name??"").trim())throw Object.assign(new Error("Location name cannot be blank."),{status:400});
+    if(payload.address&&!/^\d{6}$/.test(String(payload.pincode??"")))throw Object.assign(new Error("Invalid input: pincode must contain 6 digits when an address is entered."),{status:400});
+    if(payload.pan!==undefined)payload.pan=clean(payload.pan).toUpperCase();if(payload.gst_number!==undefined)payload.gst_number=clean(payload.gst_number).toUpperCase();
+    if(payload.pan&&!PAN_RE.test(payload.pan))throw Object.assign(new Error("Invalid input: PAN must be 10 characters in valid uppercase format."),{status:400});if(payload.gst_number&&!GST_RE.test(payload.gst_number))throw Object.assign(new Error("Invalid input: GST must be 15 characters in valid uppercase format."),{status:400});
     const fields = LOCATION_FIELDS.filter((f) => payload[f] !== undefined), values = [buyerId, ...fields.map((f) => payload[f])];
     return safeJson((await query(`INSERT INTO buyer_locations (buyer_id,${fields.join(",")}) VALUES ($1,${fields.map((_, i) => `$${i + 2}`).join(",")}) RETURNING *`, values)).rows[0]);
   },
