@@ -1,1 +1,27 @@
-import{Router}from"express";import{OrdersController as c}from"../controllers/orders.controller.js";import{requiresAuth,requiresPermission}from"../middlewares.js";const r=Router();r.use(requiresAuth);const read=requiresPermission("orders","read"),create=requiresPermission("orders","create"),update=requiresPermission("orders","update"),del=requiresPermission("orders","delete");r.get("/masters",read,c.masters);r.get("/operational",read,c.operational);r.get("/documents/:documentId",read,c.document);r.get("/",read,c.list);r.post("/",create,c.create);r.get("/:id",read,c.get);r.post("/:id/products",update,c.addProduct);r.delete("/:id/products/:productId",del,c.removeProduct);r.post("/:id/calculate",update,c.calculate);r.post("/:id/revisions",update,c.revision);r.put("/:id/stage",update,c.stage);r.post("/:id/communications",update,c.communication);r.post("/:id/generate",update,c.generate);export default r;
+import { Router } from "express";
+import { OrdersController as controller } from "../controllers/orders.controller.js";
+import { requiresAuth, requiresPermission } from "../middlewares.js";
+
+const router = Router();
+router.use(requiresAuth);
+const read = requiresPermission("orders", "read");
+const create = requiresPermission("orders", "create");
+const update = requiresPermission("orders", "update");
+const remove = requiresPermission("orders", "delete");
+
+router.get("/masters", read, controller.masters);
+router.get("/operational", read, controller.operational);
+router.get("/documents/:documentId", read, controller.document);
+router.post("/pricing-preview", create, controller.pricingPreview);
+router.get("/", read, controller.list);
+router.post("/", create, controller.create);
+router.get("/:id", read, controller.get);
+router.post("/:id/products", update, controller.addProduct);
+router.delete("/:id/products/:productId", remove, controller.removeProduct);
+router.post("/:id/calculate", update, controller.calculate);
+router.post("/:id/revisions", update, controller.revision);
+router.put("/:id/stage", update, controller.stage);
+router.post("/:id/communications", update, controller.communication);
+router.post("/:id/generate", update, controller.generate);
+
+export default router;
