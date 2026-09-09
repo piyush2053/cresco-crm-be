@@ -3,6 +3,7 @@ import { ProductsService } from "../services/products.service.js";
 
 const id = (req) => Number.parseInt(req.params.id, 10);
 export const ProductsController = {
+  async categories(req,res){res.json(await ProductsService.categories());},
   async list(req,res){res.json(await ProductsService.list(req.query));},
   async get(req,res){const row=await ProductsService.get(id(req));return row?res.json(row):res.status(404).json({message:"Website product not found."});},
   async create(req,res){res.status(201).json(await ProductsService.create(req.body,req.user.id));},

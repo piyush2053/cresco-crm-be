@@ -5,6 +5,7 @@ import { config } from "../config.js";
 
 const required = ["company", "country", "method", "grade", "application", "description"];
 async function syncGradeMaster(grade,userId){const name=String(grade??"").trim();if(!name)return;await query("INSERT INTO settings_master_records(master_type_id,code,name,data,sort_order,is_active,created_by,updated_by)SELECT t.id,'GRADE-'||substr(md5(lower($1)),1,12),$1,$2,(SELECT COALESCE(max(r.sort_order),0)+1 FROM settings_master_records r WHERE r.master_type_id=t.id),true,$3,$3 FROM settings_master_types t WHERE t.code='grades' ON CONFLICT(master_type_id,code)DO UPDATE SET name=EXCLUDED.name,is_active=true,updated_by=EXCLUDED.updated_by,updated_at=now()",[name,{source:"website_products"},userId])}
+async function ensureCategoryMaster(category){const row=(await query("SELECT r.name FROM settings_master_records r JOIN settings_master_types t ON t.id=r.master_type_id WHERE t.code='product_categories' AND r.is_active AND lower(trim(r.name))=lower(trim($1))",[category])).rows[0];if(!row)throw Object.assign(new Error("Select an active category from Settings Product Categories."),{status:400});return row.name}
 const methods = new Set(["Rutile", "Anatase"]);
 const sortable = new Set(["id", "company", "country", "method", "grade", "application", "is_active", "sort_order", "created_at", "updated_at"]);
 
@@ -74,6 +75,7 @@ async function removeIfUnreferenced(relative) {
 }
 
 export const ProductsService = {
+  async categories(){return(await query("SELECT r.id,r.code,r.name FROM settings_master_records r JOIN settings_master_types t ON t.id=r.master_type_id WHERE t.code='product_categories' AND r.is_active ORDER BY r.sort_order,r.name")).rows;},
   async list(params = {}) {
     const values = [], where = [];
     if (params.search) { values.push(`%${params.search}%`); where.push(`concat_ws(' ',company,country,method,grade,application,description) ILIKE $${values.length}`); }
@@ -92,12 +94,14 @@ export const ProductsService = {
   async get(id) { return crmRow((await query("SELECT * FROM website_products WHERE id=$1", [id])).rows[0]); },
   async create(payload, userId) {
     const data = validate(payload), slug = await uniqueSlug(data);
+    data.category=await ensureCategoryMaster(data.category);
     const row=crmRow((await query(`INSERT INTO website_products(company,country,method,grade,application,description,slug,category,is_active,sort_order,created_by,updated_by)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11) RETURNING *`,
       [data.company,data.country,data.method,data.grade,data.application,data.description,slug,data.category,data.is_active,data.sort_order,userId])).rows[0]);await syncGradeMaster(row.grade,userId);return row;
   },
   async update(id, payload, userId) {
     const data = validate(payload, true), keys = Object.keys(data);
+    if(data.category!==undefined)data.category=await ensureCategoryMaster(data.category);
     if (!keys.length) throw Object.assign(new Error("No editable product fields were supplied."), { status: 400 });
     const values = keys.map((key) => data[key]); values.push(userId, id);
     const row=crmRow((await query(`UPDATE website_products SET ${keys.map((key,index)=>`${key}=$${index+1}`).join(",")},updated_by=$${values.length-1} WHERE id=$${values.length} RETURNING *`, values)).rows[0]);await syncGradeMaster(row.grade,userId);return row;

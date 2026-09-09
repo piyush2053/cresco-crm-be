@@ -38,6 +38,7 @@ const imageUpload=multer({
 
 const router=Router();
 router.use(requiresAuth);
+router.get("/categories",requiresPermission("website_products","read"),c.categories);
 router.get("/",requiresPermission("website_products","read"),c.list);
 router.get("/:id",requiresPermission("website_products","read"),c.get);
 router.post("/",requiresPermission("website_products","create"),c.create);
