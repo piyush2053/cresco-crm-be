@@ -9,6 +9,7 @@ export const BuyersController = {
   async addContact(req,res){return res.status(201).json(await BuyersService.addContact(Number(req.params.id),req.body));},
   async updateContact(req,res){return res.json(await BuyersService.updateContact(Number(req.params.id),Number(req.params.contactId),req.body));},
   async addLocation(req,res){return res.status(201).json(await BuyersService.addLocation(Number(req.params.id),req.body));},
+  async updateLocation(req,res){return res.json(await BuyersService.updateLocation(Number(req.params.id),Number(req.params.locationId),req.body));},
   async masters(req,res){return res.json(await BuyersService.masters());},
   async bulkUpload(req,res){
     if(!req.file)return res.status(400).json({message:"Please select an Excel file."});

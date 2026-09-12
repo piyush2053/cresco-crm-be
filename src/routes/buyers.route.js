@@ -11,5 +11,5 @@ router.post("/bulk-upload",requiresPermission("buyers","create"),upload.single("
 router.get("/",requiresPermission("buyers","read"),c.list); router.get("/:id",requiresPermission("buyers","read"),c.get);
 router.post("/",requiresPermission("buyers","create"),c.create); router.put("/:id",requiresPermission("buyers","update"),c.update); router.delete("/:id",requiresPermission("buyers","delete"),c.remove);
 router.post("/:id/contacts",requiresPermission("buyers","update"),c.addContact); router.put("/:id/contacts/:contactId",requiresPermission("buyers","update"),c.updateContact);
-router.post("/:id/locations",requiresPermission("buyers","update"),c.addLocation);
+router.post("/:id/locations",requiresPermission("buyers","update"),c.addLocation); router.put("/:id/locations/:locationId",requiresPermission("buyers","update"),c.updateLocation);
 export default router;

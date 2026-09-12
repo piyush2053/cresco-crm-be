@@ -32,6 +32,7 @@ function addWhere(values, clauses, value, expression) {
   values.push(value);
   clauses.push(expression(values.length));
 }
+async function validateContact(buyerId,payload,contactId=null){if(!clean(payload.name))throw Object.assign(new Error("Buyer contact person name cannot be blank."),{status:400});const mobile=phone(payload.mobile_number);if(mobile){const duplicate=(await query("SELECT id,name FROM buyer_contacts WHERE buyer_id=$1 AND regexp_replace(mobile_number,'[^0-9]','','g')=$2 AND ($3::bigint IS NULL OR id<>$3) LIMIT 1",[buyerId,mobile,contactId])).rows[0];if(duplicate)throw Object.assign(new Error(`Contact number already belongs to ${duplicate.name} in this Buyer Group. Open the Contacts tab to view or edit that person.`),{status:409,contactId:duplicate.id})}payload.name=clean(payload.name);payload.mobile_number=mobile||null}
 
 export const BuyersService = {
   async list(params) {
@@ -79,6 +80,8 @@ export const BuyersService = {
   async create(payload, userId) {
     payload.pan=clean(payload.pan).toUpperCase();payload.gst_number=clean(payload.gst_number).toUpperCase();
     if(!clean(payload.group_name))throw Object.assign(new Error("Buyer group name cannot be blank."),{status:400});
+    if(!clean(payload.primary_contact_name))throw Object.assign(new Error("Buyer contact person name cannot be blank."),{status:400});
+    if(payload.call_date&&payload.next_call_date&&payload.next_call_date<payload.call_date)throw Object.assign(new Error("Next call date cannot be before the call date."),{status:400});
     if(!PAN_RE.test(payload.pan))throw Object.assign(new Error("Invalid input: PAN must follow AAAAA9999A format."),{status:400});
     if(!GST_RE.test(payload.gst_number))throw Object.assign(new Error("Invalid input: GSTIN must contain 15 characters in valid format."),{status:400});
     if(payload.gst_number.slice(2,12)!==payload.pan)throw Object.assign(new Error("Invalid input: GSTIN PAN must match the Buyer Group PAN."),{status:400});
@@ -101,6 +104,7 @@ export const BuyersService = {
   },
 
   async update(id, payload, userId) {
+    if(payload.call_date&&payload.next_call_date&&payload.next_call_date<payload.call_date)throw Object.assign(new Error("Next call date cannot be before the call date."),{status:400});
     if(payload.pan!==undefined){payload.pan=clean(payload.pan).toUpperCase();if(!PAN_RE.test(payload.pan))throw Object.assign(new Error("Invalid input: PAN must follow AAAAA9999A format."),{status:400})}
     const previous = (await query("SELECT call_date,next_call_date,call_remark,remark FROM buyers WHERE id=$1", [id])).rows[0];
     const fields = BUYER_FIELDS.filter((f) => payload[f] !== undefined);
@@ -124,12 +128,14 @@ export const BuyersService = {
   },
 
   async addContact(buyerId, payload) {
+    await validateContact(buyerId,payload);
     const fields = CONTACT_FIELDS.filter((f) => payload[f] !== undefined);
     const values = [buyerId, ...fields.map((f) => payload[f])];
     const result = await query(`INSERT INTO buyer_contacts (buyer_id,${fields.join(",")}) VALUES ($1,${fields.map((_, i) => `$${i + 2}`).join(",")}) RETURNING *`, values);
     return safeJson(result.rows[0]);
   },
   async updateContact(buyerId, contactId, payload) {
+    await validateContact(buyerId,payload,contactId);
     const fields = CONTACT_FIELDS.filter((f) => payload[f] !== undefined); if (!fields.length) return null;
     const values = fields.map((f) => payload[f]); values.push(buyerId, contactId);
     return safeJson((await query(`UPDATE buyer_contacts SET ${fields.map((f, i) => `${f}=$${i + 1}`).join(",")} WHERE buyer_id=$${values.length - 1} AND id=$${values.length} RETURNING *`, values)).rows[0]);
@@ -142,6 +148,13 @@ export const BuyersService = {
     if(payload.pan&&!PAN_RE.test(payload.pan))throw Object.assign(new Error("Invalid input: PAN must be 10 characters in valid uppercase format."),{status:400});if(payload.gst_number&&!GST_RE.test(payload.gst_number))throw Object.assign(new Error("Invalid input: GST must be 15 characters in valid uppercase format."),{status:400});
     const fields = LOCATION_FIELDS.filter((f) => payload[f] !== undefined), values = [buyerId, ...fields.map((f) => payload[f])];
     return safeJson((await query(`INSERT INTO buyer_locations (buyer_id,${fields.join(",")}) VALUES ($1,${fields.map((_, i) => `$${i + 2}`).join(",")}) RETURNING *`, values)).rows[0]);
+  },
+  async updateLocation(buyerId,locationId,payload){
+    if(!clean(payload.name))throw Object.assign(new Error("Location name cannot be blank."),{status:400});
+    if(payload.address&&!/^\d{6}$/.test(clean(payload.pincode)))throw Object.assign(new Error("Invalid input: pincode must contain 6 digits when an address is entered."),{status:400});
+    if(payload.pan!==undefined)payload.pan=clean(payload.pan).toUpperCase();if(payload.gst_number!==undefined)payload.gst_number=clean(payload.gst_number).toUpperCase();
+    await validateLocationDistrict(payload);if(payload.pan&&!PAN_RE.test(payload.pan))throw Object.assign(new Error("Invalid input: PAN must be 10 characters in valid uppercase format."),{status:400});if(payload.gst_number&&!GST_RE.test(payload.gst_number))throw Object.assign(new Error("Invalid input: GST must be 15 characters in valid uppercase format."),{status:400});
+    const fields=LOCATION_FIELDS.filter(f=>payload[f]!==undefined);if(!fields.length)return null;const values=fields.map(f=>payload[f]);values.push(buyerId,locationId);return safeJson((await query(`UPDATE buyer_locations SET ${fields.map((f,i)=>`${f}=$${i+1}`).join(",")},updated_at=now() WHERE buyer_id=$${values.length-1} AND id=$${values.length} RETURNING *`,values)).rows[0]);
   },
   async setInterests(buyerId, ids) {
     await query("DELETE FROM buyer_master_links WHERE buyer_id=$1", [buyerId]);
