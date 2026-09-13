@@ -10,6 +10,7 @@ const UPLOAD_HEADERS=["PAN","PAN to GST Status","GST","status","errdata","BUSINE
 const PAN_RE=/^[A-Z]{5}[0-9]{4}[A-Z]$/, GST_RE=/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/;
 const clean=v=>v===null||v===undefined?"":String(v).trim();
 const phone=v=>clean(v).replace(/\D/g,"").replace(/^91(?=\d{10}$)/,"");
+async function ensureBuyerPanAvailable(pan,buyerId=null){const buyer=(await query("SELECT id,group_name FROM buyers WHERE upper(pan)=$1 AND ($2::bigint IS NULL OR id<>$2) LIMIT 1",[pan,buyerId])).rows[0];if(buyer)throw Object.assign(new Error(`PAN ${pan} already belongs to Buyer Group \"${buyer.group_name}\". Search this PAN to open the existing record.`),{status:409});const supplier=(await query("SELECT id,group_name FROM suppliers WHERE upper(pan)=$1 LIMIT 1",[pan])).rows[0];if(supplier)throw Object.assign(new Error(`PAN ${pan} already belongs to Supplier Group \"${supplier.group_name}\". Search this PAN in Suppliers to open the existing record.`),{status:409})}
 function jsonArray(value){try{const parsed=JSON.parse(clean(value)||"[]");return Array.isArray(parsed)?parsed:[]}catch{return []}}
 function stateFrom(row){const jurisdiction=clean(row.data_basicDetails_jurisdiction);const match=jurisdiction.match(/State\s*-\s*([^,]+)/i);return match?.[1]?.trim()||""}
 function businessType(value){const codes=clean(value).toUpperCase().split(/[:;,/\s]+/);const labels=[];if(codes.includes("TRD"))labels.push("TRADER");if(codes.includes("MFT"))labels.push("MANUFACTURER");return labels.join(", ")||clean(value)}
@@ -83,6 +84,7 @@ export const BuyersService = {
     if(!clean(payload.primary_contact_name))throw Object.assign(new Error("Buyer contact person name cannot be blank."),{status:400});
     if(payload.call_date&&payload.next_call_date&&payload.next_call_date<payload.call_date)throw Object.assign(new Error("Next call date cannot be before the call date."),{status:400});
     if(!PAN_RE.test(payload.pan))throw Object.assign(new Error("Invalid input: PAN must follow AAAAA9999A format."),{status:400});
+    await ensureBuyerPanAvailable(payload.pan);
     if(!GST_RE.test(payload.gst_number))throw Object.assign(new Error("Invalid input: GSTIN must contain 15 characters in valid format."),{status:400});
     if(payload.gst_number.slice(2,12)!==payload.pan)throw Object.assign(new Error("Invalid input: GSTIN PAN must match the Buyer Group PAN."),{status:400});
     if(payload.location_address&&!/^\d{6}$/.test(clean(payload.location_pincode)))throw Object.assign(new Error("Invalid input: location pincode must contain 6 digits."),{status:400});
@@ -105,7 +107,7 @@ export const BuyersService = {
 
   async update(id, payload, userId) {
     if(payload.call_date&&payload.next_call_date&&payload.next_call_date<payload.call_date)throw Object.assign(new Error("Next call date cannot be before the call date."),{status:400});
-    if(payload.pan!==undefined){payload.pan=clean(payload.pan).toUpperCase();if(!PAN_RE.test(payload.pan))throw Object.assign(new Error("Invalid input: PAN must follow AAAAA9999A format."),{status:400})}
+    if(payload.pan!==undefined){payload.pan=clean(payload.pan).toUpperCase();if(!PAN_RE.test(payload.pan))throw Object.assign(new Error("Invalid input: PAN must follow AAAAA9999A format."),{status:400});await ensureBuyerPanAvailable(payload.pan,id)}
     const previous = (await query("SELECT call_date,next_call_date,call_remark,remark FROM buyers WHERE id=$1", [id])).rows[0];
     const fields = BUYER_FIELDS.filter((f) => payload[f] !== undefined);
     if (fields.length) {
