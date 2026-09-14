@@ -3,7 +3,7 @@ import { safeJson } from "../utils.js";
 import ExcelJS from "exceljs";
 import { ensureCoreBuyerDropdowns } from "./dropdown-defaults.js";
 
-const BUYER_FIELDS = ["group_name", "pan", "gst_slab", "state", "group_tag", "reference", "parent_location", "remark", "lead_manager", "lead_type", "monthly_consumption", "call_date", "next_call_date", "call_remark", "profile_shared", "quote_shared", "order_status", "payment_terms"];
+const BUYER_FIELDS = ["group_name", "pan", "gst_slab", "state", "group_tag", "reference", "parent_location", "remark", "lead_manager", "lead_type", "monthly_consumption", "credit_limit", "call_date", "next_call_date", "call_remark", "profile_shared", "quote_shared", "order_status", "payment_terms"];
 const CONTACT_FIELDS = ["name", "department", "designation", "mobile_number", "email_address", "whatsapp_number", "notes", "is_primary"];
 const LOCATION_FIELDS = ["name", "gst_number", "pan", "address", "pincode", "city", "state", "district_id", "delivery_preferences", "credit_terms"];
 const UPLOAD_HEADERS=["PAN","PAN to GST Status","GST","status","errdata","BUSINESS TYPE","data_basicDetails_aadharVerified","data_basicDetails_Legal_Name","data_basicDetails_gstin","data_basicDetails_Ekyc_Flag","data_basicDetails_compositionRate","BUSINESS CONSTITUTION","data_basicDetails_tradeNam","data_basicDetails_aadharVerDate","data_basicDetails_ctj","data_basicDetails_percentTaxInCash","data_basicDetails_mandatedeInvoice","data_basicDetails_aggreTurnOverFY","data_basicDetails_jurisdiction","data_basicDetails_registrationType","data_basicDetails_aggreTurnOver","data_basicDetails_cancelationDate","data_basicDetails_businessNature","data_basicDetails_registrationDate","data_basicDetails_registrationStatus","data_basicDetails_ekycVdt","data_basicDetails_percentTaxInCashFY","data_basicDetails_einvoiceStatus","data_basicDetails_memberDetails","data_basicDetails_mobile","data_basicDetails_email","data_hsnDetails_goods","data_branchDetails_permanentAdd_address","data_branchDetails_permanentAdd_dealsIn","data_branchDetails_additionalAdd"];
@@ -11,6 +11,7 @@ const PAN_RE=/^[A-Z]{5}[0-9]{4}[A-Z]$/, GST_RE=/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0
 const clean=v=>v===null||v===undefined?"":String(v).trim();
 const phone=v=>clean(v).replace(/\D/g,"").replace(/^91(?=\d{10}$)/,"");
 function validateMonthlyConsumption(payload){if(payload.monthly_consumption===undefined)return;const value=payload.monthly_consumption;if(value===null||value==="")payload.monthly_consumption=null;else if(!Number.isFinite(Number(value))||Number(value)<0)throw Object.assign(new Error("Invalid input: monthly consumption must be a non-negative number in Kg."),{status:400});else payload.monthly_consumption=Number(value)}
+function validateCreditLimit(payload){if(payload.credit_limit===undefined)return;const value=payload.credit_limit;if(value===null||value==="")payload.credit_limit=0;else if(!Number.isFinite(Number(value))||Number(value)<0)throw Object.assign(new Error("Invalid input: group credit limit must be a non-negative amount in Rupees."),{status:400});else payload.credit_limit=Number(value)}
 async function stateFromGstin(gstin){await ensureCoreBuyerDropdowns();const code=clean(gstin).slice(0,2);const state=(await query("SELECT label FROM buyer_master_values WHERE master_type='state' AND code=$1 AND is_active LIMIT 1",[code])).rows[0];if(!state)throw Object.assign(new Error(`GST state code ${code||"is missing"} is not configured as an active State in Buyer Master.`),{status:400});return state.label}
 async function ensureBuyerPanAvailable(pan,buyerId=null){const buyer=(await query("SELECT id,group_name FROM buyers WHERE upper(pan)=$1 AND ($2::bigint IS NULL OR id<>$2) LIMIT 1",[pan,buyerId])).rows[0];if(buyer)throw Object.assign(new Error(`PAN ${pan} already belongs to Buyer Group \"${buyer.group_name}\". Search this PAN to open the existing record.`),{status:409});const supplier=(await query("SELECT id,group_name FROM suppliers WHERE upper(pan)=$1 LIMIT 1",[pan])).rows[0];if(supplier)throw Object.assign(new Error(`PAN ${pan} already belongs to Supplier Group \"${supplier.group_name}\". Search this PAN in Suppliers to open the existing record.`),{status:409})}
 function jsonArray(value){try{const parsed=JSON.parse(clean(value)||"[]");return Array.isArray(parsed)?parsed:[]}catch{return []}}
@@ -73,7 +74,7 @@ export const BuyersService = {
       query("SELECT DISTINCT c.* FROM buyer_contacts c LEFT JOIN buyer_contact_locations cl ON cl.contact_id=c.id LEFT JOIN buyer_locations l ON l.id=cl.location_id WHERE c.buyer_id=$1 OR l.buyer_id=$1 ORDER BY c.is_primary DESC,c.created_at", [id]),
       query("SELECT l.*,max(d.name) district_name,COALESCE(json_agg(json_build_object('contact_id',cl.contact_id,'phone_number',cl.phone_number,'email_address',cl.email_address)) FILTER (WHERE cl.contact_id IS NOT NULL),'[]') contacts FROM buyer_locations l LEFT JOIN logistics_districts d ON d.id=l.district_id LEFT JOIN buyer_contact_locations cl ON cl.location_id=l.id WHERE l.buyer_id=$1 GROUP BY l.id ORDER BY l.created_at", [id]),
       query("SELECT mv.* FROM buyer_master_links l JOIN buyer_master_values mv ON mv.id=l.master_value_id WHERE l.buyer_id=$1 ORDER BY mv.master_type,mv.label", [id]),
-      query("SELECT d.id,d.field_key,d.label,d.field_type,d.options,d.is_required,v.value FROM buyer_custom_field_definitions d LEFT JOIN buyer_custom_field_values v ON v.definition_id=d.id AND v.buyer_id=$1 WHERE d.is_active ORDER BY d.sort_order,d.id", [id]),
+      query("SELECT d.id,d.field_key,d.label,d.field_type,d.options,d.is_required,d.validation,v.value FROM buyer_custom_field_definitions d LEFT JOIN buyer_custom_field_values v ON v.definition_id=d.id AND v.buyer_id=$1 WHERE d.is_active AND NOT COALESCE(d.is_hidden,false) ORDER BY d.sort_order,d.id", [id]),
       query("SELECT a.*,u.name created_by_name FROM buyer_activities a LEFT JOIN users u ON u.id=a.created_by WHERE a.buyer_id=$1 ORDER BY a.occurred_at DESC LIMIT 100", [id]),
       query("SELECT id,inquiry_number,inquiry_date,current_stage,status,(SELECT COALESCE(sum(quantity_kg*COALESCE(quoted_price,final_quotation_price)),0) FROM sales_transaction_products WHERE transaction_id=t.id) current_quote FROM sales_transactions t WHERE buyer_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC",[id]),
     ]);
@@ -92,6 +93,7 @@ export const BuyersService = {
     if(payload.gst_number.slice(2,12)!==payload.pan)throw Object.assign(new Error("Invalid input: GSTIN PAN must match the Buyer Group PAN."),{status:400});
     payload.state=await stateFromGstin(payload.gst_number);
     validateMonthlyConsumption(payload);
+    validateCreditLimit(payload);
     if(payload.location_address&&!/^\d{6}$/.test(clean(payload.location_pincode)))throw Object.assign(new Error("Invalid input: location pincode must contain 6 digits."),{status:400});
     await validateLocationDistrict({district_id:payload.location_district_id,pincode:payload.location_pincode});
     const client=await getClient();
@@ -114,6 +116,7 @@ export const BuyersService = {
     if(payload.call_date&&payload.next_call_date&&payload.next_call_date<payload.call_date)throw Object.assign(new Error("Next call date cannot be before the call date."),{status:400});
     if(payload.pan!==undefined){payload.pan=clean(payload.pan).toUpperCase();if(!PAN_RE.test(payload.pan))throw Object.assign(new Error("Invalid input: PAN must follow AAAAA9999A format."),{status:400});await ensureBuyerPanAvailable(payload.pan,id)}
     validateMonthlyConsumption(payload);
+    validateCreditLimit(payload);
     const previous = (await query("SELECT call_date,next_call_date,call_remark,remark FROM buyers WHERE id=$1", [id])).rows[0];
     const fields = BUYER_FIELDS.filter((f) => payload[f] !== undefined);
     if (fields.length) {
