@@ -10,6 +10,8 @@ const UPLOAD_HEADERS=["PAN","PAN to GST Status","GST","status","errdata","BUSINE
 const PAN_RE=/^[A-Z]{5}[0-9]{4}[A-Z]$/, GST_RE=/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/;
 const clean=v=>v===null||v===undefined?"":String(v).trim();
 const phone=v=>clean(v).replace(/\D/g,"").replace(/^91(?=\d{10}$)/,"");
+function validateMonthlyConsumption(payload){if(payload.monthly_consumption===undefined)return;const value=payload.monthly_consumption;if(value===null||value==="")payload.monthly_consumption=null;else if(!Number.isFinite(Number(value))||Number(value)<0)throw Object.assign(new Error("Invalid input: monthly consumption must be a non-negative number in Kg."),{status:400});else payload.monthly_consumption=Number(value)}
+async function stateFromGstin(gstin){await ensureCoreBuyerDropdowns();const code=clean(gstin).slice(0,2);const state=(await query("SELECT label FROM buyer_master_values WHERE master_type='state' AND code=$1 AND is_active LIMIT 1",[code])).rows[0];if(!state)throw Object.assign(new Error(`GST state code ${code||"is missing"} is not configured as an active State in Buyer Master.`),{status:400});return state.label}
 async function ensureBuyerPanAvailable(pan,buyerId=null){const buyer=(await query("SELECT id,group_name FROM buyers WHERE upper(pan)=$1 AND ($2::bigint IS NULL OR id<>$2) LIMIT 1",[pan,buyerId])).rows[0];if(buyer)throw Object.assign(new Error(`PAN ${pan} already belongs to Buyer Group \"${buyer.group_name}\". Search this PAN to open the existing record.`),{status:409});const supplier=(await query("SELECT id,group_name FROM suppliers WHERE upper(pan)=$1 LIMIT 1",[pan])).rows[0];if(supplier)throw Object.assign(new Error(`PAN ${pan} already belongs to Supplier Group \"${supplier.group_name}\". Search this PAN in Suppliers to open the existing record.`),{status:409})}
 function jsonArray(value){try{const parsed=JSON.parse(clean(value)||"[]");return Array.isArray(parsed)?parsed:[]}catch{return []}}
 function stateFrom(row){const jurisdiction=clean(row.data_basicDetails_jurisdiction);const match=jurisdiction.match(/State\s*-\s*([^,]+)/i);return match?.[1]?.trim()||""}
@@ -79,6 +81,7 @@ export const BuyersService = {
   },
 
   async create(payload, userId) {
+    for(const field of ["call_date","next_call_date","call_remark","order_status","payment_terms"])delete payload[field];
     payload.pan=clean(payload.pan).toUpperCase();payload.gst_number=clean(payload.gst_number).toUpperCase();
     if(!clean(payload.group_name))throw Object.assign(new Error("Buyer group name cannot be blank."),{status:400});
     if(!clean(payload.primary_contact_name))throw Object.assign(new Error("Buyer contact person name cannot be blank."),{status:400});
@@ -87,6 +90,8 @@ export const BuyersService = {
     await ensureBuyerPanAvailable(payload.pan);
     if(!GST_RE.test(payload.gst_number))throw Object.assign(new Error("Invalid input: GSTIN must contain 15 characters in valid format."),{status:400});
     if(payload.gst_number.slice(2,12)!==payload.pan)throw Object.assign(new Error("Invalid input: GSTIN PAN must match the Buyer Group PAN."),{status:400});
+    payload.state=await stateFromGstin(payload.gst_number);
+    validateMonthlyConsumption(payload);
     if(payload.location_address&&!/^\d{6}$/.test(clean(payload.location_pincode)))throw Object.assign(new Error("Invalid input: location pincode must contain 6 digits."),{status:400});
     await validateLocationDistrict({district_id:payload.location_district_id,pincode:payload.location_pincode});
     const client=await getClient();
@@ -108,6 +113,7 @@ export const BuyersService = {
   async update(id, payload, userId) {
     if(payload.call_date&&payload.next_call_date&&payload.next_call_date<payload.call_date)throw Object.assign(new Error("Next call date cannot be before the call date."),{status:400});
     if(payload.pan!==undefined){payload.pan=clean(payload.pan).toUpperCase();if(!PAN_RE.test(payload.pan))throw Object.assign(new Error("Invalid input: PAN must follow AAAAA9999A format."),{status:400});await ensureBuyerPanAvailable(payload.pan,id)}
+    validateMonthlyConsumption(payload);
     const previous = (await query("SELECT call_date,next_call_date,call_remark,remark FROM buyers WHERE id=$1", [id])).rows[0];
     const fields = BUYER_FIELDS.filter((f) => payload[f] !== undefined);
     if (fields.length) {
@@ -147,7 +153,7 @@ export const BuyersService = {
     if(payload.address&&!/^\d{6}$/.test(String(payload.pincode??"")))throw Object.assign(new Error("Invalid input: pincode must contain 6 digits when an address is entered."),{status:400});
     if(payload.pan!==undefined)payload.pan=clean(payload.pan).toUpperCase();if(payload.gst_number!==undefined)payload.gst_number=clean(payload.gst_number).toUpperCase();
     await validateLocationDistrict(payload);
-    if(payload.pan&&!PAN_RE.test(payload.pan))throw Object.assign(new Error("Invalid input: PAN must be 10 characters in valid uppercase format."),{status:400});if(payload.gst_number&&!GST_RE.test(payload.gst_number))throw Object.assign(new Error("Invalid input: GST must be 15 characters in valid uppercase format."),{status:400});
+    if(payload.pan&&!PAN_RE.test(payload.pan))throw Object.assign(new Error("Invalid input: PAN must be 10 characters in valid uppercase format."),{status:400});if(payload.gst_number&&!GST_RE.test(payload.gst_number))throw Object.assign(new Error("Invalid input: GST must be 15 characters in valid uppercase format."),{status:400});if(payload.gst_number)payload.state=await stateFromGstin(payload.gst_number);
     const fields = LOCATION_FIELDS.filter((f) => payload[f] !== undefined), values = [buyerId, ...fields.map((f) => payload[f])];
     return safeJson((await query(`INSERT INTO buyer_locations (buyer_id,${fields.join(",")}) VALUES ($1,${fields.map((_, i) => `$${i + 2}`).join(",")}) RETURNING *`, values)).rows[0]);
   },
@@ -155,7 +161,7 @@ export const BuyersService = {
     if(!clean(payload.name))throw Object.assign(new Error("Location name cannot be blank."),{status:400});
     if(payload.address&&!/^\d{6}$/.test(clean(payload.pincode)))throw Object.assign(new Error("Invalid input: pincode must contain 6 digits when an address is entered."),{status:400});
     if(payload.pan!==undefined)payload.pan=clean(payload.pan).toUpperCase();if(payload.gst_number!==undefined)payload.gst_number=clean(payload.gst_number).toUpperCase();
-    await validateLocationDistrict(payload);if(payload.pan&&!PAN_RE.test(payload.pan))throw Object.assign(new Error("Invalid input: PAN must be 10 characters in valid uppercase format."),{status:400});if(payload.gst_number&&!GST_RE.test(payload.gst_number))throw Object.assign(new Error("Invalid input: GST must be 15 characters in valid uppercase format."),{status:400});
+    await validateLocationDistrict(payload);if(payload.pan&&!PAN_RE.test(payload.pan))throw Object.assign(new Error("Invalid input: PAN must be 10 characters in valid uppercase format."),{status:400});if(payload.gst_number&&!GST_RE.test(payload.gst_number))throw Object.assign(new Error("Invalid input: GST must be 15 characters in valid uppercase format."),{status:400});if(payload.gst_number)payload.state=await stateFromGstin(payload.gst_number);
     const fields=LOCATION_FIELDS.filter(f=>payload[f]!==undefined);if(!fields.length)return null;const values=fields.map(f=>payload[f]);values.push(buyerId,locationId);return safeJson((await query(`UPDATE buyer_locations SET ${fields.map((f,i)=>`${f}=$${i+1}`).join(",")},updated_at=now() WHERE buyer_id=$${values.length-1} AND id=$${values.length} RETURNING *`,values)).rows[0]);
   },
   async setInterests(buyerId, ids) {
