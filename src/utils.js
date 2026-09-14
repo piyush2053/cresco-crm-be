@@ -55,3 +55,6 @@ export function safeJson(value) {
     return null;
   }
 }
+
+export const wrap = (handler) => (req, res, next) =>
+  Promise.resolve(handler(req, res)).catch(next);
