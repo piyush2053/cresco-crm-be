@@ -22,7 +22,8 @@ import { startSchedulers } from "./services/scheduler.service.js";
 import { config } from "./config.js";
 
 const app = express();
-const allowedOrigins = new Set(config.app.corsOrigins);
+const isDevelopment = ["dev", "development"].includes((process.env.NODE_ENV || "").toLowerCase());
+const allowedOrigins = new Set(isDevelopment ? ["*"] : config.app.corsOrigins);
 app.set("trust proxy", 1);
 app.use(cors({
   origin(origin, callback) {
