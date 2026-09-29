@@ -10,7 +10,8 @@
     "initial-data:template": "node --env-file-if-exists=.env scripts/initial-data-load.js template",
     "initial-data:validate": "node --env-file-if-exists=.env scripts/initial-data-load.js validate",
     "initial-data:import": "node --env-file-if-exists=.env scripts/initial-data-load.js import",
-    "products:import": "node --env-file-if-exists=.env scripts/import-website-products.js"
+    "products:import": "node --env-file-if-exists=.env scripts/import-website-products.js",
+    "data:clean:post-testing": "node --env-file-if-exists=.env scripts/data-clean-post-testing.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
