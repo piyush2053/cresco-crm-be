@@ -4,7 +4,13 @@ const wrap = (handler) => (req, res, next) => Promise.resolve(handler(req, res))
 
 export const OrdersController = {
   masters: wrap(async (req, res) => res.json(await service.masters())),
+  exCrescoPrices: wrap(async (req, res) => res.json(await service.exCrescoPrices())),
+  addExCrescoPrice: wrap(async (req, res) => res.status(201).json(await service.addExCrescoPrice(req.body, req.user.id))),
+  deactivateExCrescoPrice: wrap(async (req, res) => res.json(await service.deactivateExCrescoPrice(+req.params.priceId, req.user.id))),
+  quotationSettings: wrap(async (req, res) => res.json(await service.quotationSettings())),
+  updateQuotationSettings: wrap(async (req, res) => res.json(await service.updateQuotationSettings(req.body, req.user.id))),
   pricingPreview: wrap(async (req, res) => res.json(await service.pricingPreview(req.body))),
+  procurementPreview: wrap(async (req, res) => res.json(await service.procurementPreview(req.body))),
   list: wrap(async (req, res) => res.json(await service.list(req.query))),
   operational: wrap(async (req, res) => res.json(await service.operational())),
   get: wrap(async (req, res) => {
@@ -15,6 +21,8 @@ export const OrdersController = {
   addProduct: wrap(async (req, res) => res.status(201).json(await service.addProduct(+req.params.id, req.body))),
   removeProduct: wrap(async (req, res) => res.json(await service.removeProduct(+req.params.id, +req.params.productId))),
   calculate: wrap(async (req, res) => res.json(await service.calculate(+req.params.id, req.user.id))),
+  convertToOrder: wrap(async (req, res) => res.status(201).json(await service.convertToOrder(+req.params.id, req.body, req.user.id))),
+  overrideQuote: wrap(async (req, res) => res.json(await service.overrideQuote(+req.params.id, +req.params.productId, req.body, req.user.id))),
   revision: wrap(async (req, res) => res.status(201).json(await service.revision(+req.params.id, req.body, req.user.id))),
   stage: wrap(async (req, res) => res.json(await service.stage(+req.params.id, req.body, req.user.id))),
   communication: wrap(async (req, res) => res.status(201).json(await service.communicate(+req.params.id, req.body, req.user.id))),
