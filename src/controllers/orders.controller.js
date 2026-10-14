@@ -5,6 +5,8 @@ const wrap = (handler) => (req, res, next) => Promise.resolve(handler(req, res))
 export const OrdersController = {
   masters: wrap(async (req, res) => res.json(await service.masters())),
   exCrescoPrices: wrap(async (req, res) => res.json(await service.exCrescoPrices())),
+  analyzeExCrescoUpload: wrap(async(req,res)=>{if(!req.file)throw Object.assign(new Error("Please select an Excel file."),{status:400});res.json(await service.analyzeExCrescoUpload(req.file.originalname,req.file.buffer))}),
+  bulkUploadExCrescoPrices: wrap(async(req,res)=>{if(!req.file)throw Object.assign(new Error("Please select an Excel file."),{status:400});res.json(await service.bulkUploadExCrescoPrices(req.file.originalname,req.file.buffer,req.user.id))}),
   addExCrescoPrice: wrap(async (req, res) => res.status(201).json(await service.addExCrescoPrice(req.body, req.user.id))),
   deactivateExCrescoPrice: wrap(async (req, res) => res.json(await service.deactivateExCrescoPrice(+req.params.priceId, req.user.id))),
   quotationSettings: wrap(async (req, res) => res.json(await service.quotationSettings())),

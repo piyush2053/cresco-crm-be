@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { OrdersController as controller } from "../controllers/orders.controller.js";
 import { requiresAuth, requiresPermission } from "../middlewares.js";
+import multer from "multer";
+const catalogUpload=multer({storage:multer.memoryStorage(),limits:{fileSize:15*1024*1024}});
 
 const router = Router();
 router.use(requiresAuth);
@@ -13,6 +15,8 @@ router.get("/masters", read, controller.masters);
 router.get("/ex-cresco-prices", read, controller.exCrescoPrices);
 router.post("/ex-cresco-prices", create, controller.addExCrescoPrice);
 router.delete("/ex-cresco-prices/:priceId", remove, controller.deactivateExCrescoPrice);
+router.post("/ex-cresco-prices/bulk-analyze",create,catalogUpload.single("file"),controller.analyzeExCrescoUpload);
+router.post("/ex-cresco-prices/bulk-upload",create,catalogUpload.single("file"),controller.bulkUploadExCrescoPrices);
 router.get("/quotation-settings", read, controller.quotationSettings);
 router.put("/quotation-settings", update, controller.updateQuotationSettings);
 router.get("/operational", read, controller.operational);

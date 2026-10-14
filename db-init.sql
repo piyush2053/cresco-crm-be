@@ -110,6 +110,7 @@ CREATE TRIGGER trg_buyer_primary_contact BEFORE INSERT OR UPDATE OF is_primary O
 \ir database-scripts/orders/004-lock-new-inquiry-date.sql
 \ir database-scripts/orders/005-commercial-procurement-quotation-separation.sql
 \ir database-scripts/finance/001-complete-finance-mis.sql
+\ir database-scripts/supplier/003-integrated-working-capital.sql
 \ir database-scripts/finance/002-delayed-payment-debit-notes.sql
 \ir database-scripts/settings/001-complete-settings-master-data.sql
 \ir database-scripts/settings/002-mail-template-system.sql
@@ -118,6 +119,7 @@ CREATE TRIGGER trg_buyer_primary_contact BEFORE INSERT OR UPDATE OF is_primary O
 \ir database-scripts/settings/005-secure-user-deletion.sql
 \ir database-scripts/settings/006-business-logic-examples.sql
 \ir database-scripts/settings/006-product-category-master.sql
+\ir database-scripts/settings/007-bank-account-master.sql
 \ir database-scripts/orders/006-quotation-logic-variables.sql
 \ir database-scripts/reports/001-reports-bi.sql
 \ir database-scripts/search/001-global-search-indexes.sql
