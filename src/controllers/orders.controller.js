@@ -22,7 +22,6 @@ export const OrdersController = {
   create: wrap(async (req, res) => res.status(201).json(await service.create(req.body, req.user.id))),
   addProduct: wrap(async (req, res) => res.status(201).json(await service.addProduct(+req.params.id, req.body))),
   removeProduct: wrap(async (req, res) => res.json(await service.removeProduct(+req.params.id, +req.params.productId))),
-  calculate: wrap(async (req, res) => res.json(await service.calculate(+req.params.id, req.user.id))),
   convertToOrder: wrap(async (req, res) => res.status(201).json(await service.convertToOrder(+req.params.id, req.body, req.user.id))),
   overrideQuote: wrap(async (req, res) => res.json(await service.overrideQuote(+req.params.id, +req.params.productId, req.body, req.user.id))),
   revision: wrap(async (req, res) => res.status(201).json(await service.revision(+req.params.id, req.body, req.user.id))),

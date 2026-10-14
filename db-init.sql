@@ -121,6 +121,7 @@ CREATE TRIGGER trg_buyer_primary_contact BEFORE INSERT OR UPDATE OF is_primary O
 \ir database-scripts/settings/006-product-category-master.sql
 \ir database-scripts/settings/007-bank-account-master.sql
 \ir database-scripts/orders/006-quotation-logic-variables.sql
+\ir database-scripts/orders/007-repair-quotation-rate-snapshots.sql
 \ir database-scripts/reports/001-reports-bi.sql
 \ir database-scripts/search/001-global-search-indexes.sql
 \ir database-scripts/notifications/001-notification-archive.sql

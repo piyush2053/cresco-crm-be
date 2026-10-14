@@ -28,7 +28,6 @@ router.post("/", create, controller.create);
 router.get("/:id", read, controller.get);
 router.post("/:id/products", update, controller.addProduct);
 router.delete("/:id/products/:productId", remove, controller.removeProduct);
-router.post("/:id/calculate", update, controller.calculate);
 router.post("/:id/convert-to-order", update, controller.convertToOrder);
 router.put("/:id/products/:productId/quote-override", update, controller.overrideQuote);
 router.post("/:id/revisions", update, controller.revision);
