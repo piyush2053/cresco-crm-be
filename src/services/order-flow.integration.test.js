@@ -1,0 +1,131 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { getClient } from '../db.js';
+import { createOrderFlowService } from './order-flow.service.js';
+import { createOrderFlowJobs } from './order-flow.jobs.js';
+
+// Explicit opt-in; every relation/function is session-local. Search path excludes public.
+test('PostgreSQL: complete flow, rollback, idempotency, credit and RBAC', {skip:process.env.ORDER_FLOW_DB_TEST!=='1'}, async()=>{
+  const c=await getClient();
+  try {
+    await c.query('CREATE TEMP TABLE order_flow_test_guard(id int)');
+    await c.query('SET search_path TO pg_temp');
+    assert.match((await c.query('SELECT current_schema() name')).rows[0].name,/^pg_temp_/);
+    await c.query(`
+      CREATE TEMP TABLE users(id integer PRIMARY KEY,name text,role_id integer,is_admin boolean DEFAULT false,is_active boolean DEFAULT true);
+      CREATE TEMP TABLE notifications(user_id integer,title text,message text,type text,link text,metadata jsonb);
+      CREATE TEMP TABLE roles(id integer PRIMARY KEY,name text,permissions jsonb DEFAULT '{}');
+      CREATE TEMP TABLE settings_access_permissions(role_id integer,scope_type text,scope_key text,permissions jsonb);
+      CREATE TEMP TABLE buyers(id bigint PRIMARY KEY,group_name text,credit_limit numeric);
+      CREATE TEMP TABLE buyer_contacts(id bigint,buyer_id bigint,name text,mobile_number text,is_primary boolean,email_address text);
+      CREATE TEMP TABLE buyer_locations(id bigint,buyer_id bigint,address text,gst_number text);
+      CREATE TEMP TABLE suppliers(id bigint PRIMARY KEY,is_active boolean);
+      CREATE TEMP TABLE sales_transactions(id bigint PRIMARY KEY,inquiry_number text,buyer_id bigint,current_stage text,deleted_at timestamptz,status text DEFAULT 'Open',updated_at timestamptz DEFAULT now());
+      CREATE TEMP TABLE sales_transaction_products(id bigint PRIMARY KEY,transaction_id bigint,product_category text,grade text,quantity_kg numeric,from_district_id bigint,to_district_id bigint);
+      CREATE TEMP TABLE ex_cresco_prices(id bigint,product_category text,grade text,is_active boolean,valid_from date,valid_to date,created_at timestamptz,rate_per_kg numeric);
+      CREATE TEMP TABLE logistics_base_freight(from_district_id bigint,to_district_id bigint,quantity_kg numeric,is_active boolean,effective_from date,effective_to date,version int,created_at timestamptz,base_freight_per_kg numeric);
+      CREATE TEMP TABLE logistics_transporters(id bigint PRIMARY KEY,is_active boolean);
+      CREATE TEMP TABLE finance_receivables_view(buyer_id bigint,outstanding numeric,invoice_number text);
+      CREATE TEMP TABLE orders(transaction_id bigint,buyer_id bigint,deleted_at timestamptz,invoice_number text,status text,total_order_value numeric,payment_received numeric);
+      INSERT INTO roles(id,name) VALUES(1,'Admin'),(2,'Sales'),(3,'Order Team'),(4,'Accounts');
+      UPDATE roles SET permissions='{"modules":{"orders":true},"actions":{"update":true}}';
+      INSERT INTO users(id,name,role_id,is_admin) VALUES(1,'Admin',1,true),(2,'Sales',2,false),(3,'Team',3,false),(4,'Accounts',4,false);
+      INSERT INTO buyers VALUES(1,'Test buyer',1000000);
+      INSERT INTO suppliers VALUES(1,true),(2,true);
+      INSERT INTO sales_transactions(id,inquiry_number,buyer_id,current_stage) VALUES(1,'INQ-TEST-1',1,'Inquiry Created'),(2,'INQ-TEST-2',1,'Inquiry Created'),(3,'INQ-TEST-3',1,'Inquiry Created');
+      INSERT INTO sales_transaction_products VALUES(1,1,'Test material','A',1000,1,2),(2,2,'Test material','A',1000,1,2),(3,3,'Test material','A',1000,1,2);
+      INSERT INTO ex_cresco_prices VALUES(1,'Test material','A',true,CURRENT_DATE,null,now(),100),(2,'Test material','A',true,CURRENT_DATE+1,null,now(),900);
+      INSERT INTO logistics_base_freight VALUES(1,2,1000,true,CURRENT_DATE,null,1,now(),5);
+      INSERT INTO logistics_transporters VALUES(1,true);
+    `);
+    const migration=await readFile(new URL('../../database-scripts/orders/008-order-flow.sql',import.meta.url),'utf8');
+    await c.query(migration.replaceAll('CREATE TABLE IF NOT EXISTS','CREATE TEMP TABLE IF NOT EXISTS').replaceAll('enforce_order_flow_owner','pg_temp.enforce_order_flow_owner'));
+    const db={query:(...args)=>c.query(...args),getClient:async()=>({query:(...args)=>c.query(...args),release(){}})};
+    const service=createOrderFlowService(db);
+    const admin={id:1,role_id:1,is_admin:true},sales={id:2,role_id:2,is_admin:false},team={id:3,role_id:3,is_admin:false};
+    let version=0;
+    const request=(stage,fields={},action='advance')=>({stage,fields,action,version,request_key:crypto.randomUUID()});
+    const save=async(stage,fields={},action='advance',user=admin)=>{const result=await service.save(1,request(stage,fields,action),user);version=result.version;return result;};
+    await save('0',{},'enroll');
+    const enquiry={contact:'Buyer',phone:'9999999999',packing:'Bags',delivery_address:'Test address',payment_terms:'Advance',credit_days:0};
+    let f=await save('1',enquiry);
+    assert.equal(f.data.delivered_price,105);
+    await assert.rejects(()=>save('4',{suppliers:[]}),/sequence/);
+    const req=request('2',{validity:'2026-12-31',payment_terms:'Advance',delivery_terms:'Delivered',send_via:'Download'});
+    f=await service.save(1,req,admin);version=f.version;
+    assert.deepEqual(JSON.parse(JSON.stringify(await service.save(1,req,admin))),JSON.parse(JSON.stringify(f)));
+    await assert.rejects(()=>service.save(1,{...req,fields:{...req.fields,send_via:'Email'}},admin),/Idempotency/);
+    await assert.rejects(()=>service.save(1,{...request('3'),version:0},admin),/Refresh/);
+    await save('3',{buyer_po:'PO1',quantity_kg:1000,delivered_price:105,credit_days:0,gst_number:'TESTGST',billing_address:'Test',gst_percent:18});
+    await assert.rejects(()=>save('4',{suppliers:[]}),/sequence/);
+    await assert.rejects(()=>save('3A',{amount:100,payment_date:'2026-10-26',mode:'UPI',bank_reference:'REF'},'advance',team),/Role/);
+    await save('3A',{amount:100,payment_date:'2026-10-26',mode:'UPI',bank_reference:'REF'});
+    const supplier=id=>({supplier_id:id,quantity_kg:500,rate:90,basis:'Ex-works',ready_date:'2026-10-26',pickup_address:'Godown',contact:'Supplier'});
+    await save('4',{suppliers:[supplier(1),supplier(2)]});
+    await assert.rejects(()=>c.query("UPDATE sales_transactions SET current_stage='Delivered' WHERE id=1"),/flow API/);
+    await assert.rejects(()=>save('5',{transporter_id:1,freight:6,freight_basis:'Per kg',vehicle_type:'Truck',door_delivery:'Yes',contact:'Transporter',payment_terms:'Advance'}),/reason/);
+    await save('5',{transporter_id:1,freight:5,freight_basis:'Per kg',vehicle_type:'Truck',door_delivery:'Yes',contact:'Transporter',payment_terms:'Advance'});
+    await save('6',{dispatch_date:'2026-10-26',confirmed_by:'Supplier',transit_days:2});
+    const vehicle=(number,supplier_id)=>({supplier_id,number,driver:'Driver',phone:'9999999999',length_m:2,width_m:2,height_m:2,capacity_kg:600,allocated_kg:500,dispatch_date:'2026-10-26'});
+    await save('7',{vehicles:[vehicle('MH12AB1234',1),vehicle('MH12AB1235',2)]});
+    await save('8',{arrival:'2026-10-26T09:00'});
+    await save('9',{loading_start:'2026-10-26T10:00'});
+    await save('10',{loading_end:'2026-10-26T11:00',loaded_quantity:1000,package_count:40});
+    const invoice=(id,rate=90)=>({supplier_id:id,number:`SUP-${id}`,date:'2026-10-26',quantity_kg:500,rate,taxable:45000,gst:8100,total:53100,eway_number:'EW1'});
+    await assert.rejects(()=>save('11',{invoices:[invoice(1),invoice(2,95)]}),/mismatch reason/);
+    assert.equal(+(await c.query('SELECT count(*) n FROM order_flow_invoices')).rows[0].n,0,'failed stage rolls back first invoice');
+    await save('11',{invoices:[invoice(1),invoice(2)]});
+    await save('12',{dispatch_time:'2026-10-26T12:00',lr_number:'LR1',invoice_date:'2026-10-26',notify_buyer:'No'});
+    await save('13',{location:'In transit'});
+    f=await save('14',{delivered_at:'2026-10-28T12:00',received_quantity:999,shortage_damage_reason:'One kg shortage'});
+    assert.equal(f.status,'Delivered');assert.equal(f.data.buyer_invoice.total,123900);
+    assert.equal(+(await c.query('SELECT count(*) n FROM order_flow_tasks')).rows[0].n,3);
+    const visible=await service.get(1,sales);
+    assert.equal(visible.data.margin_per_kg,undefined);assert.equal(visible.data['4'].suppliers.length,2);
+    assert.equal((await service.list({stage:'14'})).length,1);
+    // Automatic credit check counts outstanding and other uninvoiced orders.
+    await c.query('UPDATE buyers SET credit_limit=150000 WHERE id=1');
+    await c.query("INSERT INTO finance_receivables_view VALUES(1,50000,'INV-INQ-TEST-1')");
+    for(const id of [2,3]) {
+      let v=0;
+      const step=async(stage,fields,action='advance',actor=admin)=>{const r=await service.save(id,{stage,fields,action,version:v,request_key:crypto.randomUUID()},actor);v=r.version;return r;};
+      await step('0',{},'enroll');await step('1',{...enquiry,payment_terms:'Credit',...(id===3?{delivered_price:106,price_reason:'Enquiry negotiation'}:{})});await step('2',{...req.fields,payment_terms:'Credit'});
+      const credit=await step('3',{buyer_po:`PO${id}`,quantity_kg:1000,delivered_price:105,credit_days:30,gst_number:'TESTGST',billing_address:'Test',gst_percent:18,price_reason:'Final negotiation'});
+      assert.equal(credit.status,'Credit check failed');assert.equal(credit.current_stage,'3');
+      await assert.rejects(()=>step('3A',{override_reason:'approved'},'advance',team),/Role/);
+      if(id===2)await step('3A',{override_reason:'Admin approved exception'});
+    }
+    const checks=(await c.query('SELECT result FROM order_flow_credit_checks WHERE transaction_id=3')).rows;
+    assert.equal(checks[0].result.open,123900);
+    assert.equal(+(await c.query('SELECT count(*) n FROM order_flow_price_overrides WHERE transaction_id=3')).rows[0].n,2);
+    const before=await service.get(2,admin);
+    const rewound=await service.save(2,{stage:'3',action:'back',reason:'Review terms',version:before.version,request_key:crypto.randomUUID()},admin);
+    assert.equal(rewound.data.credit_check,undefined);
+    await c.query("INSERT INTO settings_access_permissions VALUES(3,'Module','orders','{\"edit\":false}')");
+    await assert.rejects(()=>service.save(2,{stage:'4',action:'draft',fields:{},version:rewound.version,request_key:crypto.randomUUID()},team),/update permission/);
+    await c.query('DELETE FROM settings_access_permissions');
+    const partial=await service.save(2,{stage:'3A',action:'draft',fields:{bank_reference:'unfinished',amount:'-'},version:rewound.version,request_key:crypto.randomUUID()},admin);
+    assert.equal(partial.version,rewound.version+1);
+    const draft=(await service.get(2,admin)).drafts.find(d=>d.stage==='3A');assert.equal(draft.fields.amount,'-');
+    await c.query("INSERT INTO buyer_contacts(id,buyer_id,email_address) VALUES(1,1,'buyer@example.invalid')");
+    await c.query("INSERT INTO order_flow_tasks(transaction_id,kind,assigned_role) VALUES(2,'Email quotation','Sales')");
+    let sent=0;
+    const jobs=createOrderFlowJobs({getClient:db.getClient,sendMail:async()=>{sent++;},flowService:{quotation:async()=>({html:'<p>Quotation</p>'})}});
+    await jobs();
+    assert.equal(sent,1,'outbox uses injected mail transport; no real messages sent');
+    await jobs();assert.equal(sent,1,'completed outbox messages are not sent again');
+    assert.equal((await c.query("SELECT status FROM order_flow_tasks WHERE kind='Email quotation'")).rows[0].status,'Completed');
+    assert.ok((await c.query('SELECT count(*) n FROM notifications')).rows[0].n>0);
+    await c.query(migration.replaceAll('CREATE TABLE IF NOT EXISTS','CREATE TEMP TABLE IF NOT EXISTS').replaceAll('enforce_order_flow_owner','pg_temp.enforce_order_flow_owner'));
+    assert.equal(+(await c.query('SELECT count(*) n FROM order_flows')).rows[0].n,3,'rerunning migration preserves enrolled orders');
+    // Rollback SQL is checked in the same isolated session.
+    const down=await readFile(new URL('../../database-scripts/orders/rollback/008-order-flow.sql',import.meta.url),'utf8');
+    await c.query(down.replaceAll('enforce_order_flow_owner','pg_temp.enforce_order_flow_owner'));
+    assert.equal((await c.query("SELECT to_regclass('pg_temp.order_flows') value")).rows[0].value,null);
+  } finally {
+    await c.query('ROLLBACK');
+    // DISCARD TEMP removes only this session's temporary test objects.
+    await c.query('DISCARD TEMP');await c.query('RESET search_path');c.release();
+  }
+});

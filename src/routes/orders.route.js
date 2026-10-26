@@ -1,22 +1,31 @@
 import { Router } from "express";
 import { OrdersController as controller } from "../controllers/orders.controller.js";
 import { requiresAuth, requiresPermission } from "../middlewares.js";
-import multer from "multer";
-const catalogUpload=multer({storage:multer.memoryStorage(),limits:{fileSize:15*1024*1024}});
+import { OrderFlowService, flowAccess, redactOrderData } from '../services/order-flow.service.js';
+const flowWrap = handler => (req,res,next) => Promise.resolve(handler(req,res)).catch(next);
 
 const router = Router();
 router.use(requiresAuth);
+router.use((req,res,next)=>flowAccess(req.user).then(access=>{
+  const json=res.json.bind(res);
+  res.json=value=>json(redactOrderData(value,access.margin));
+  next();
+}).catch(next));
 const read = requiresPermission("orders", "read");
 const create = requiresPermission("orders", "create");
 const update = requiresPermission("orders", "update");
 const remove = requiresPermission("orders", "delete");
 
 router.get("/masters", read, controller.masters);
+router.get('/flow-metadata', read, flowWrap(async(req,res)=>res.json(await OrderFlowService.metadata(req.user))));
+router.get('/flows', read, flowWrap(async(req,res)=>res.json(await OrderFlowService.list(req.query))));
+router.get('/:id/flow', read, flowWrap(async(req,res)=>res.json(await OrderFlowService.get(+req.params.id,req.user))));
+router.get('/:id/flow/quotation', read, flowWrap(async(req,res)=>res.json(await OrderFlowService.quotation(+req.params.id))));
+router.get('/:id/flow/suppliers', read, flowWrap(async(req,res)=>res.json(await OrderFlowService.suppliers(+req.params.id))));
+router.post('/:id/flow', update, flowWrap(async(req,res)=>res.json(await OrderFlowService.save(+req.params.id,req.body,req.user))));
 router.get("/ex-cresco-prices", read, controller.exCrescoPrices);
 router.post("/ex-cresco-prices", create, controller.addExCrescoPrice);
 router.delete("/ex-cresco-prices/:priceId", remove, controller.deactivateExCrescoPrice);
-router.post("/ex-cresco-prices/bulk-analyze",create,catalogUpload.single("file"),controller.analyzeExCrescoUpload);
-router.post("/ex-cresco-prices/bulk-upload",create,catalogUpload.single("file"),controller.bulkUploadExCrescoPrices);
 router.get("/quotation-settings", read, controller.quotationSettings);
 router.put("/quotation-settings", update, controller.updateQuotationSettings);
 router.get("/operational", read, controller.operational);
